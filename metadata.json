@@ -1,0 +1,6 @@
+{
+  "name": "SmartPark Web",
+  "description": "Hệ thống đỗ xe & đặt chỗ thông minh SmartPark Việt Nam với tính năng bản đồ và thanh toán QR",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

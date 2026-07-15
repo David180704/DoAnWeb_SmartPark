@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thanh toán VietQR - SmartPark</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/banking-qr.css">
+</head>
+<body>
+  <header>
+    <div class="nav-left">
+      <div class="logo">SmartPark</div>
+      <nav class="nav-links">
+        <a href="/">Trang chủ</a>
+        <a href="#booking-form">Bãi Xe</a>
+        <a href="#promotions">Khuyến mãi</a>
+        <a href="#contact-section">Liên hệ</a>
+      </nav>
+    </div>
+    <div class="auth-buttons">
+      <a href="/login" class="btn-login">Đăng nhập</a>
+    </div>
+  </header>
+
+  <main class="banking-qr-container">
+    <div class="qr-card">
+      <div class="qr-header">
+        <h2>Thanh toán bằng VietQR</h2>
+        <div class="tx-meta">
+          <span class="tx-id">Mã giao dịch: <strong><%= booking.id %></strong></span>
+          <span class="timer" id="countdown">Hạn: 10:00</span>
+        </div>
+      </div>
+
+      <div class="qr-body">
+        <div class="qr-image">
+          <img id="qrImg" src="<%= qrUrl %>" alt="QR Payment" />
+        </div>
+
+        <div class="qr-details">
+          <h3>Thông tin thanh toán</h3>
+
+          <div class="detail-row">
+            <div>Ngân hàng</div>
+            <div><strong><%= bankName %></strong></div>
+          </div>
+
+          <div class="detail-row">
+            <div>Số tài khoản</div>
+            <div><strong><%= accountNumber %></strong></div>
+          </div>
+
+          <div class="detail-row">
+            <div>Chủ tài khoản</div>
+            <div style="text-align:right"><strong><%= accountHolder %></strong></div>
+          </div>
+
+          <div class="detail-row">
+            <div>Số tiền</div>
+            <div><strong style="color:var(--primary-green); font-size:1.05em;"><%= formattedPrice %></strong></div>
+          </div>
+
+          <div class="detail-row">
+            <div>Nội dung chuyển tiền</div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
+              <code id="memo" style="background:#f7faf7;padding:6px 8px;border-radius:6px;border:1px solid #eef7f2;"><%= memoContent %></code>
+              <button id="copyMemo" class="copy">Sao chép</button>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="btnPaid" class="btn btn-primary">Tôi đã thanh toán</button>
+            <button id="btnSimulateFail" class="btn btn-secondary">Hủy</button>
+            <button id="btnPrint" class="btn btn-secondary">In</button>
+          </div>
+
+          <div class="note">
+            <strong>Lưu ý:</strong> Vui lòng chuyển đúng số tiền và nội dung chuyển tiền để hệ thống tự động đối soát. QR có hiệu lực trong 10 phút.
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:12px 20px; border-top:1px solid #f1f6f2; background:#fbfffc; display:flex; justify-content:flex-end; gap:8px;">
+        <button onclick="location.href='/'" class="btn btn-secondary">Đóng</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- E-TICKET MODAL (hidden by default) -->
+  <div id="ticketModal" class="fixed inset-0 hidden z-50 items-center justify-center p-4 bg-slate-900/75 backdrop-blur-md">
+    <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+      <div class="bg-slate-900 p-6 text-white relative">
+        <button id="closeTicket" class="absolute top-4 right-4 p-1.5 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white">✕</button>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <div style="width:40px;height:40px;border-radius:999px;background:var(--primary-green);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px;">SP</div>
+          <div>
+            <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--primary-green);">SMARTPARK E-CARD</h3>
+            <p style="margin:0; font-size:12px; color:#cbd5c1">Thẻ Đỗ Xe Điện Tử</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:18px;">
+        <div style="border-bottom:1px solid #f1f5f0; padding-bottom:12px; margin-bottom:12px;">
+          <div style="font-size:11px; color:#9ca3a1; text-transform:uppercase; font-weight:700;">Địa điểm</div>
+          <div id="ticketLocation" style="font-weight:800; margin-top:6px;">SmartPark - Vị trí</div>
+          <div id="ticketAddress" style="font-size:12px; color:#6b7280; margin-top:4px;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px; color:#9ca3a1; font-weight:700;">Biển số</div>
+            <div id="ticketPlate" style="font-weight:800; margin-top:6px;"></div>
+          </div>
+          <div>
+            <div style="font-size:11px; color:#9ca3a1; font-weight:700;">Vị trí</div>
+            <div id="ticketSlots" style="font-weight:800; margin-top:6px; color:var(--primary-green);"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+          <div>
+            <div style="font-size:11px; color:#9ca3a1; font-weight:700;">Tổng thanh toán</div>
+            <div id="ticketPrice" style="font-weight:900; color:var(--primary-green); margin-top:6px; font-size:18px;"></div>
+          </div>
+
+          <div style="background:#f8faf8;padding:10px;border-radius:10px;border:1px solid #eef7f2;text-align:center;">
+            <div style="display:flex; height:40px; gap:0.5rem; align-items:center; justify-content:center; margin-bottom:6px;">
+              <!-- barcode lines -->
+              <div style="background:#111; width:3px; height:26px;"></div>
+              <div style="background:#111; width:2px; height:26px;"></div>
+              <div style="background:#111; width:4px; height:26px;"></div>
+              <div style="background:#111; width:2px; height:26px;"></div>
+              <div style="background:#111; width:3px; height:26px;"></div>
+            </div>
+            <div id="ticketCode" style="font-family:monospace; font-size:12px; color:#6b7280; letter-spacing:4px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fbfffc; padding:12px; border-top:1px solid #f1f6f2; display:flex; justify-content:flex-end; gap:10px;">
+        <button id="printTicket" class="btn btn-secondary">In thẻ</button>
+        <button id="closeTicket2" class="btn btn-primary">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" id="booking-data"><%- JSON.stringify({ id: booking.id, formattedPrice: formattedPrice, memoContent: memoContent }).replace(/</g,'\\u003c') %></script>
+  <script>
+    // Countdown timer (10 minutes)
+    (function(){
+      let remaining = 10*60; // seconds
+      const el = document.getElementById('countdown');
+      function update(){
+        const mm = Math.floor(remaining/60).toString().padStart(2,'0');
+        const ss = (remaining%60).toString().padStart(2,'0');
+        if(el) el.textContent = 'Hạn: ' + mm + ':' + ss;
+        if(remaining>0) remaining--; else clearInterval(timer);
+      }
+      update();
+      const timer = setInterval(update,1000);
+    })();
+
+    // Copy memo
+    document.getElementById('copyMemo')?.addEventListener('click', async ()=>{
+      const memo = document.getElementById('memo')?.textContent || '';
+      try{ await navigator.clipboard.writeText(memo); alert('Đã sao chép nội dung chuyển tiền'); }
+      catch(e){ prompt('Sao chép nội dung chuyển tiền:', memo); }
+    });
+
+    // Print QR image
+    document.getElementById('btnPrint')?.addEventListener('click', ()=>{
+      const img = document.getElementById('qrImg').src;
+      const w = window.open('');
+      w.document.write('<img src="'+img+'" style="max-width:100%;">');
+      w.print();
+    });
+
+    // Simulate payment: show ticket modal
+    document.getElementById('btnPaid')?.addEventListener('click', ()=>{
+      // Fill ticket modal data from server-rendered variables
+      // Pass booking data into client JS safely
+      const bookingData = JSON.parse(document.getElementById('booking-data')?.textContent || '{}');
+      // For demo, set some placeholders (replace with real booking fields if available)
+      document.getElementById('ticketLocation').textContent = (document.querySelector('.logo')?.textContent || 'SmartPark') + ' - Bãi thử';
+      document.getElementById('ticketAddress').textContent = 'Địa chỉ: 123 Đường Demo, Quận 1';
+      document.getElementById('ticketPlate').textContent = '37A-12345';
+      document.getElementById('ticketSlots').textContent = 'B5';
+      document.getElementById('ticketPrice').textContent = bookingData.formattedPrice || '';
+      document.getElementById('ticketCode').textContent = bookingData.id || '';
+      document.getElementById('ticketModal').classList.remove('hidden');
+      document.getElementById('ticketModal').classList.add('flex');
+    });
+
+    // Close ticket
+    document.getElementById('closeTicket')?.addEventListener('click', ()=>{ closeTicket(); });
+    document.getElementById('closeTicket2')?.addEventListener('click', ()=>{ closeTicket(); });
+    function closeTicket(){
+      document.getElementById('ticketModal').classList.remove('flex');
+      document.getElementById('ticketModal').classList.add('hidden');
+    }
+
+    // Print ticket
+    document.getElementById('printTicket')?.addEventListener('click', ()=>{
+      const node = document.querySelector('#ticketModal > div');
+      const w = window.open('');
+      w.document.write('<html><head><title>Ticket</title></head><body>'+node.innerHTML+'</body></html>');
+      w.print();
+    });
+  </script>
+</body>
+</html>

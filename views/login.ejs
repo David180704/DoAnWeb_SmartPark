@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPark - Đăng Nhập & Đăng Ký</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body class="auth-body">
+    
+    <!-- HEADER -->
+    <header class="auth-header">
+        <div class="auth-header-content">
+            <a href="/" class="logo-back">
+                <span class="logo-icon">←</span>
+                <span>SmartPark</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <div class="auth-container">
+        <!-- Left Side - Info Panel -->
+        <div class="auth-panel-left">
+            <div class="auth-panel-content">
+                <div class="auth-welcome">
+                    <h1>Chào mừng đến SmartPark</h1>
+                    <p>Hệ thống đỗ xe & đặt chỗ thông minh</p>
+                </div>
+                <div class="auth-features">
+                    <div class="feature-item">
+                        <div class="feature-icon">🚗</div>
+                        <h3>Đặt chỗ nhanh</h3>
+                        <p>Tìm và đặt chỗ đỗ xe trong vòng 30 giây</p>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">💰</div>
+                        <h3>Thanh toán dễ dàng</h3>
+                        <p>Hỗ trợ QR code, thẻ tín dụng, và ví điện tử</p>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">📊</div>
+                        <h3>Quản lý tiện lợi</h3>
+                        <p>Theo dõi lịch sử đặt chỗ và chi tiêu hàng tháng</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - Auth Form -->
+        <div class="auth-panel-right">
+            <div class="auth-form-wrapper">
+                <!-- LOGIN FORM -->
+                <div id="login-form" class="auth-form active">
+                    <div class="auth-header-form">
+                        <h2>Đăng Nhập</h2>
+                        <p>Hệ thống đỗ xe & đặt chỗ thông minh SmartPark Việt Nam</p>
+                    </div>
+
+                    <div id="login-error" class="alert alert-error hidden"></div>
+
+                    <form id="form-login" class="form-group">
+                        <div class="form-field">
+                            <label for="phone-login">Số điện thoại</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">📞</span>
+                                <input 
+                                    type="tel" 
+                                    id="phone-login"
+                                    name="phone" 
+                                    placeholder="Nhập số điện thoại (Ví dụ: 0909123456)"
+                                    required
+                                >
+                            </div>
+                            <p class="hint">Tài khoản thử: <strong>0909123456</strong></p>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="password-login">Mật khẩu</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">🔒</span>
+                                <input 
+                                    type="password" 
+                                    id="password-login"
+                                    name="password" 
+                                    placeholder="Nhập mật khẩu của bạn"
+                                    required
+                                >
+                            </div>
+                            <p class="hint">Mật khẩu mẫu: <strong>123456</strong></p>
+                        </div>
+
+                        <div class="form-remember">
+                            <label>
+                                <input type="checkbox" checked> Ghi nhớ đăng nhập
+                            </label>
+                            <a href="#forgot-password" class="forgot-link">Quên mật khẩu?</a>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-login">Đăng Nhập</button>
+                    </form>
+
+                    <div class="form-toggle">
+                        <p>Chưa có tài khoản SmartPark? 
+                            <button type="button" class="toggle-btn" onclick="toggleForm('register-form')">
+                                Đăng ký ngay
+                            </button>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- REGISTER FORM -->
+                <div id="register-form" class="auth-form">
+                    <div class="auth-header-form">
+                        <h2>Đăng Ký SmartPark</h2>
+                        <p>Tạo tài khoản để đỗ xe nhanh chóng và quản lý vị trí</p>
+                    </div>
+
+                    <div id="register-error" class="alert alert-error hidden"></div>
+                    <div id="register-success" class="alert alert-success hidden"></div>
+
+                    <form id="form-register" class="form-group">
+                        <div class="form-field">
+                            <label for="fullname">Họ và Tên</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">👤</span>
+                                <input 
+                                    type="text" 
+                                    id="fullname"
+                                    name="fullName" 
+                                    placeholder="Ví dụ: Nguyễn Hoàng Long"
+                                    required
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="phone-register">Số điện thoại</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">📞</span>
+                                    <input 
+                                        type="tel" 
+                                        id="phone-register"
+                                        name="phone" 
+                                        placeholder="0909123456"
+                                        required
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="license-plate">Biển số xe (Mặc định)</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">🚗</span>
+                                    <input 
+                                        type="text" 
+                                        id="license-plate"
+                                        name="licensePlate" 
+                                        placeholder="VD: 30F-123.45"
+                                        required
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email">Email</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">📧</span>
+                                <input 
+                                    type="email" 
+                                    id="email"
+                                    name="email" 
+                                    placeholder="mail@example.com"
+                                    required
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="password-register">Mật khẩu</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">🔒</span>
+                                    <input 
+                                        type="password" 
+                                        id="password-register"
+                                        name="password" 
+                                        placeholder="Tối thiểu 6 ký tự"
+                                        required
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="confirm-password">Xác nhận mật khẩu</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">🔒</span>
+                                    <input 
+                                        type="password" 
+                                        id="confirm-password"
+                                        name="confirmPassword" 
+                                        placeholder="Xác nhận mật khẩu"
+                                        required
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-register">Đăng Ký Tài Khoản</button>
+                    </form>
+
+                    <div class="form-toggle">
+                        <p>Đã có tài khoản SmartPark? 
+                            <button type="button" class="toggle-btn" onclick="toggleForm('login-form')">
+                                Đăng nhập ngay
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        // Form toggle function
+        function toggleForm(formId) {
+            const forms = document.querySelectorAll('.auth-form');
+            forms.forEach(form => form.classList.remove('active'));
+            document.getElementById(formId).classList.add('active');
+            
+            // Clear errors and reset classes
+            const loginError = document.getElementById('login-error');
+            loginError.classList.add('hidden');
+            loginError.className = 'alert alert-error hidden';
+            document.getElementById('register-error').classList.add('hidden');
+        }
+
+        // Show error/success messages
+        function showError(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = 'alert alert-error';
+            element.classList.remove('hidden');
+        }
+
+        function hideError(elementId) {
+            document.getElementById(elementId).classList.add('hidden');
+        }
+
+        // LOGIN FORM HANDLER
+        document.getElementById('form-login').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError('login-error');
+
+            const phone = document.getElementById('phone-login').value;
+            const password = document.getElementById('password-login').value;
+
+            if (!phone || !password) {
+                showError('login-error', 'Vui lòng điền đầy đủ thông tin đăng nhập.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Số điện thoại hoặc mật khẩu không chính xác.');
+                }
+
+                // Success
+                localStorage.setItem('smartpark_user', JSON.stringify(data));
+                
+                // Check if redirect query parameter exists
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectUrl = urlParams.get('redirect');
+                if (redirectUrl) {
+                    window.location.href = redirectUrl;
+                } else {
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                showError('login-error', error.message);
+            }
+        });
+
+        // REGISTER FORM HANDLER
+        document.getElementById('form-register').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError('register-error');
+
+            const fullName = document.getElementById('fullname').value;
+            const phone = document.getElementById('phone-register').value;
+            const email = document.getElementById('email').value;
+            const licensePlate = document.getElementById('license-plate').value;
+            const password = document.getElementById('password-register').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            // Validation
+            if (!fullName || !phone || !email || !licensePlate || !password || !confirmPassword) {
+                showError('register-error', 'Vui lòng điền đầy đủ tất cả các thông tin đăng ký.');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showError('register-error', 'Mật khẩu xác nhận không trùng khớp.');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('register-error', 'Mật khẩu của bạn phải có ít nhất 6 ký tự.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fullName,
+                        phone,
+                        email,
+                        licensePlate: licensePlate.toUpperCase(),
+                        password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Lỗi đăng ký tài khoản.');
+                }
+
+                // Success
+                // Lưu cache thông tin vừa đăng ký
+                localStorage.setItem('smartpark_registered_phone', phone);
+                localStorage.setItem('smartpark_registered_password', password);
+
+                document.getElementById('register-success').textContent = 'Đăng ký thành công! Đang tự động chuyển dữ liệu sang trang Đăng nhập...';
+                document.getElementById('register-success').classList.remove('hidden');
+
+                setTimeout(() => {
+                    // Tự động chuyển dữ liệu sang Form đăng nhập
+                    document.getElementById('phone-login').value = phone;
+                    document.getElementById('password-login').value = password;
+                    
+                    // Chuyển form hiển thị
+                    toggleForm('login-form');
+                    
+                    // Hiển thị thông báo thành công bên Form đăng nhập
+                    const loginError = document.getElementById('login-error');
+                    loginError.textContent = 'Đăng ký tài khoản thành công! Thông tin đăng nhập đã tự động điền. Vui lòng bấm "Đăng Nhập".';
+                    loginError.className = 'alert alert-success'; // Đổi class thành thành công màu xanh lá
+                    loginError.classList.remove('hidden');
+
+                    // Reset form đăng ký
+                    document.getElementById('form-register').reset();
+                    document.getElementById('register-success').classList.add('hidden');
+                }, 1500);
+            } catch (error) {
+                showError('register-error', error.message);
+            }
+        });
+    </script>
+</body>
+</html>
