@@ -3,6 +3,7 @@ const Transaction = require('../models/Transaction');
 const ParkingSpot = require('../models/ParkingSpot');
 const ParkingLotModel = require('../models/ParkingLotModel');
 const Vehicle = require('../models/Vehicle');
+const User = require('../models/User');
 const parkingRepository = require('./parkingRepository');
 const userRepository = require('./userRepository');
 const { buildQrUrl } = require('../utils/payment');
@@ -177,4 +178,61 @@ async function confirmPayment(ticketCode, userId) {
     );
 }
 
-module.exports = { createTicket, findByCode, findByUser, confirmPayment };
+// Staff-facing lookup: same as findByCode with no ownership check, plus
+// the customer's name/phone so front-desk staff can identify the driver.
+async function findForStaff(ticketCode) {
+    const found = await findByCode(ticketCode);
+    if (!found) return null;
+
+    const user = await User.findById(found._ticketDoc.user_id);
+    return {
+        ...found,
+        customerName: user ? user.full_name : null,
+        customerPhone: user ? user.phone : null
+    };
+}
+
+async function checkIn(ticketCode) {
+    const found = await findByCode(ticketCode);
+    if (!found) return null;
+    if (found.status !== 'ACTIVE') {
+        const err = new Error('NOT_PAID');
+        err.code = 'NOT_PAID';
+        throw err;
+    }
+
+    const ticket = found._ticketDoc;
+    ticket.check_in_time = new Date();
+    await ticket.save();
+
+    return { ...found, checkInTime: ticket.check_in_time };
+}
+
+async function checkOut(ticketCode) {
+    const found = await findByCode(ticketCode);
+    if (!found) return null;
+    if (found.status !== 'ACTIVE') {
+        const err = new Error('NOT_ACTIVE');
+        err.code = 'NOT_ACTIVE';
+        throw err;
+    }
+
+    const ticket = found._ticketDoc;
+    const checkOutTime = new Date();
+    const checkInTime = ticket.check_in_time || ticket.booking_time;
+    const actualMinutes = Math.round((checkOutTime - checkInTime) / 60000);
+    const overtimeMinutes = Math.max(0, actualMinutes - ticket.expected_hours * 60);
+
+    ticket.check_out_time = checkOutTime;
+    ticket.overtime_minutes = overtimeMinutes;
+    ticket.status = 'COMPLETED';
+    await ticket.save();
+
+    const lot = await ParkingLotModel.findById(ticket.lot_id);
+    const spot = await ParkingSpot.findById(ticket.spot_id);
+    await parkingRepository.releaseSpot(lot.lot_code, spot.spot_code);
+
+    return { ...found, status: 'COMPLETED', checkOutTime, overtimeMinutes };
+}
+
+module.exports = { createTicket, findByCode, findByUser, confirmPayment, findForStaff, checkIn, checkOut };

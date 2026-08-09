@@ -3,7 +3,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth, requireStaff } = require('./middleware/auth');
 const { signUserToken } = require('./utils/jwt');
 const { BANK_INFO, buildMemoContent } = require('./utils/payment');
 const userRepository = require('./repositories/userRepository');
@@ -214,6 +214,69 @@ app.post('/api/tickets/:code/confirm-payment', requireAuth, async (req, res) => 
     }
 });
 
+// ===================== STAFF API (role: STAFF or ADMIN only) =====================
+
+app.get('/api/staff/tickets/:code', requireStaff, async (req, res) => {
+    try {
+        const ticket = await ticketRepository.findForStaff(req.params.code);
+        if (!ticket) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(ticket));
+    } catch (err) {
+        console.error('Lỗi khi tra cứu vé (nhân viên):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.post('/api/staff/tickets/:code/confirm-payment', requireStaff, async (req, res) => {
+    try {
+        const updated = await ticketRepository.confirmPayment(req.params.code);
+        if (!updated) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(updated));
+    } catch (err) {
+        if (err.code === 'ALREADY_PROCESSED') {
+            return res.status(400).json({ message: 'Vé này đã được xử lý.' });
+        }
+        console.error('Lỗi khi xác nhận thanh toán (nhân viên):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống khi xác nhận thanh toán.' });
+    }
+});
+
+app.post('/api/staff/tickets/:code/check-in', requireStaff, async (req, res) => {
+    try {
+        const updated = await ticketRepository.checkIn(req.params.code);
+        if (!updated) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(updated));
+    } catch (err) {
+        if (err.code === 'NOT_PAID') {
+            return res.status(400).json({ message: 'Vé chưa thanh toán, cần xác nhận thanh toán trước khi check-in.' });
+        }
+        console.error('Lỗi khi check-in:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống khi check-in.' });
+    }
+});
+
+app.post('/api/staff/tickets/:code/check-out', requireStaff, async (req, res) => {
+    try {
+        const updated = await ticketRepository.checkOut(req.params.code);
+        if (!updated) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(updated));
+    } catch (err) {
+        if (err.code === 'NOT_ACTIVE') {
+            return res.status(400).json({ message: 'Vé không ở trạng thái có thể check-out.' });
+        }
+        console.error('Lỗi khi check-out:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống khi check-out.' });
+    }
+});
+
 // ===================== PAGES =====================
 
 app.get('/', async (req, res) => {
@@ -226,6 +289,10 @@ app.get('/', async (req, res) => {
 
 app.get('/login', (req, res) => {
     res.render('login', { title: 'Đăng Nhập - SmartPark' });
+});
+
+app.get('/staff/scan', (req, res) => {
+    res.render('staffScan', { title: 'Quét Vé - SmartPark' });
 });
 
 app.get('/parking/:lotId', async (req, res) => {

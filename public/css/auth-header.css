@@ -24,7 +24,7 @@
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: 320px;
+  width: 380px;
   max-height: 420px;
   background: #fff;
   color: #333;
@@ -44,12 +44,13 @@
   flex: 1;
   background: none;
   border: none;
-  padding: 12px 6px;
-  font-size: 13px;
+  padding: 10px 4px;
+  font-size: 11px;
   font-weight: 600;
   color: #777;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  line-height: 1.3;
 }
 
 .sp-tab.active {
@@ -109,6 +110,22 @@
 .sp-status-active { background: #d1fae5; color: #065f46; }
 .sp-status-completed { background: #e0e7ff; color: #3730a3; }
 .sp-status-cancelled { background: #fee2e2; color: #991b1b; }
+
+.sp-print-btn {
+  margin-top: 6px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--primary-green, #10b981);
+  color: var(--primary-green, #10b981);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sp-print-btn:hover {
+  background: #f0fdf9;
+}
 
 .sp-empty, .sp-loading {
   font-size: 13px;

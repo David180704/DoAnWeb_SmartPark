@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/auth-header.css">
+    <link rel="stylesheet" href="/css/staff-scan.css">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="nav-left">
+            <a href="/" class="logo" style="text-decoration: none; color: white;">SmartPark</a>
+            <nav class="nav-links">
+                <a href="/">Trang chủ</a>
+                <a href="/#booking-form">Bãi Xe</a>
+                <a href="/#promotions">Khuyến mãi</a>
+                <a href="/#news">Tin tức</a>
+                <a href="/#contact-section">Liên hệ</a>
+            </nav>
+        </div>
+        <div class="auth-buttons">
+            <a href="/login" class="btn-register">Đăng ký</a>
+            <a href="/login" class="btn-login">Đăng nhập</a>
+        </div>
+    </header>
+
+    <main class="staff-container">
+        <div id="deniedPanel" class="staff-denied" style="display:none;">
+            <h2>Không có quyền truy cập</h2>
+            <p>Trang này chỉ dành cho tài khoản nhân viên. Đang chuyển về trang chủ...</p>
+        </div>
+
+        <div id="staffPanel" style="display:none;">
+            <h1>Quét Vé Khách Hàng</h1>
+
+            <div class="staff-tabs">
+                <button type="button" class="staff-tab active" data-mode="camera">📷 Quét QR</button>
+                <button type="button" class="staff-tab" data-mode="manual">⌨️ Nhập mã vé</button>
+            </div>
+
+            <div class="staff-mode-panel" id="cameraPanel">
+                <video id="scanVideo" playsinline></video>
+                <canvas id="scanCanvas" style="display:none;"></canvas>
+                <div class="staff-scan-actions">
+                    <button type="button" id="btnStartCamera" class="btn btn-primary">Bật camera</button>
+                    <button type="button" id="btnStopCamera" class="btn btn-secondary" style="display:none;">Tắt camera</button>
+                </div>
+                <p class="staff-hint">Đưa mã QR chứa mã vé (dạng TKxxxxxxxxxx) vào khung hình camera.</p>
+            </div>
+
+            <div class="staff-mode-panel" id="manualPanel" style="display:none;">
+                <form id="manualForm" class="staff-manual-form">
+                    <input type="text" id="manualCode" placeholder="Nhập mã vé, ví dụ: TKABCD123456" required autocomplete="off">
+                    <button type="submit" class="btn btn-primary">Tra cứu</button>
+                </form>
+            </div>
+
+            <div id="resultPanel" class="staff-result" style="display:none;"></div>
+        </div>
+    </main>
+
+    <script src="/js/auth-header.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+        const STAFF_ROLES = ['STAFF', 'ADMIN'];
+        const user = SmartParkAuth.getUser();
+
+        if (!SmartParkAuth.getToken() || !user || !STAFF_ROLES.includes(user.role)) {
+            document.getElementById('deniedPanel').style.display = 'block';
+            setTimeout(() => { window.location.href = '/'; }, 2000);
+        } else {
+            document.getElementById('staffPanel').style.display = 'block';
+            initStaffPanel();
+        }
+
+        function initStaffPanel() {
+            const tabs = document.querySelectorAll('.staff-tab');
+            const cameraPanel = document.getElementById('cameraPanel');
+            const manualPanel = document.getElementById('manualPanel');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const mode = tab.dataset.mode;
+                    cameraPanel.style.display = mode === 'camera' ? 'block' : 'none';
+                    manualPanel.style.display = mode === 'manual' ? 'block' : 'none';
+                    if (mode !== 'camera') stopCamera();
+                });
+            });
+
+            // ---- Camera QR scanning (jsQR) ----
+            const video = document.getElementById('scanVideo');
+            const canvas = document.getElementById('scanCanvas');
+            const ctx = canvas.getContext('2d');
+            let stream = null;
+            let scanning = false;
+
+            async function startCamera() {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    video.srcObject = stream;
+                    video.setAttribute('playsinline', true);
+                    await video.play();
+                    document.getElementById('btnStartCamera').style.display = 'none';
+                    document.getElementById('btnStopCamera').style.display = 'inline-block';
+                    scanning = true;
+                    requestAnimationFrame(tick);
+                } catch (err) {
+                    alert('Không thể mở camera: ' + err.message + '. Bạn có thể dùng tab "Nhập mã vé" thay thế.');
+                }
+            }
+
+            function stopCamera() {
+                scanning = false;
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                    stream = null;
+                }
+                document.getElementById('btnStartCamera').style.display = 'inline-block';
+                document.getElementById('btnStopCamera').style.display = 'none';
+            }
+
+            function tick() {
+                if (!scanning) return;
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (code && code.data) {
+                        stopCamera();
+                        lookupTicket(code.data.trim());
+                        return;
+                    }
+                }
+                requestAnimationFrame(tick);
+            }
+
+            document.getElementById('btnStartCamera').addEventListener('click', startCamera);
+            document.getElementById('btnStopCamera').addEventListener('click', stopCamera);
+
+            // ---- Manual entry ----
+            document.getElementById('manualForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const code = document.getElementById('manualCode').value.trim().toUpperCase();
+                if (code) lookupTicket(code);
+            });
+        }
+
+        function statusLabel(status) {
+            const map = { PENDING: 'Chờ thanh toán', ACTIVE: 'Đang hiệu lực', COMPLETED: 'Đã hoàn tất', CANCELLED: 'Đã hủy' };
+            return map[status] || status;
+        }
+
+        function formatMoney(n) { return new Intl.NumberFormat('vi-VN').format(n || 0) + '₫'; }
+        function formatDateTime(iso) { return iso ? new Date(iso).toLocaleString('vi-VN') : '—'; }
+        function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+        async function lookupTicket(code) {
+            const panel = document.getElementById('resultPanel');
+            panel.style.display = 'block';
+            panel.innerHTML = '<p class="staff-hint">Đang tra cứu...</p>';
+
+            try {
+                const res = await SmartParkAuth.authFetch('/api/staff/tickets/' + encodeURIComponent(code));
+                const ticket = await res.json();
+                if (!res.ok) {
+                    panel.innerHTML = `<p class="staff-error">${esc(ticket.message || 'Không tìm thấy vé.')}</p>`;
+                    return;
+                }
+                renderTicket(ticket);
+            } catch (err) {
+                panel.innerHTML = '<p class="staff-error">Lỗi kết nối. Vui lòng thử lại.</p>';
+            }
+        }
+
+        function renderTicket(t) {
+            const panel = document.getElementById('resultPanel');
+            panel.innerHTML = `
+                <div class="staff-ticket-card">
+                    <div class="staff-ticket-header">
+                        <strong>${esc(t.code)}</strong>
+                        <span class="sp-ticket-badge sp-status-${esc((t.status||'').toLowerCase())}">${esc(statusLabel(t.status))}</span>
+                    </div>
+                    <div class="staff-row"><span>Khách hàng</span><strong>${esc(t.customerName)} (${esc(t.customerPhone)})</strong></div>
+                    <div class="staff-row"><span>Biển số</span><strong>${esc(t.vehiclePlate)}</strong></div>
+                    <div class="staff-row"><span>Bãi xe</span><strong>${esc(t.lotName)}</strong></div>
+                    <div class="staff-row"><span>Vị trí</span><strong>${esc(t.spot)} (${esc(t.zone)})</strong></div>
+                    <div class="staff-row"><span>Số giờ dự kiến</span><strong>${t.expectedHours} giờ</strong></div>
+                    <div class="staff-row"><span>Đặt lúc</span><strong>${formatDateTime(t.bookingTime)}</strong></div>
+                    <div class="staff-row"><span>Check-in</span><strong>${formatDateTime(t.checkInTime)}</strong></div>
+                    <div class="staff-row"><span>Check-out</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>
+                    <div class="staff-row"><span>Thanh toán</span><strong>${t.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : 'Chưa thanh toán'} · ${formatMoney(t.totalPrice)}</strong></div>
+                    ${t.qrCodeUrl ? `<img src="${t.qrCodeUrl}" class="staff-qr-img" alt="QR thanh toán">` : ''}
+                    <div class="staff-actions">
+                        <button type="button" class="btn btn-primary" data-action="confirm-payment" ${t.paymentStatus === 'SUCCESS' ? 'disabled' : ''}>Xác nhận thanh toán</button>
+                        <button type="button" class="btn btn-primary" data-action="check-in" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Check-in</button>
+                        <button type="button" class="btn btn-primary" data-action="check-out" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Check-out</button>
+                        <button type="button" class="btn btn-secondary" data-action="print">In vé</button>
+                    </div>
+                </div>
+            `;
+
+            panel.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', () => handleAction(t.code, btn.dataset.action, t));
+            });
+        }
+
+        async function handleAction(code, action, ticket) {
+            if (action === 'print') return printTicket(ticket);
+
+            try {
+                const res = await SmartParkAuth.authFetch(`/api/staff/tickets/${encodeURIComponent(code)}/${action}`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Thao tác thất bại.');
+                    return;
+                }
+                renderTicket(data);
+            } catch (err) {
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        }
+
+        function printTicket(t) {
+            const w = window.open('', '_blank', 'width=420,height=600');
+            w.document.write(`
+                <html><head><title>Vé ${esc(t.code)}</title>
+                <style>body{font-family:sans-serif;padding:24px;color:#111} h2{color:#10b981} .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee}</style>
+                </head><body>
+                <h2>SmartPark - Vé đỗ xe</h2>
+                <div class="row"><span>Mã vé</span><strong>${esc(t.code)}</strong></div>
+                <div class="row"><span>Khách hàng</span><strong>${esc(t.customerName)}</strong></div>
+                <div class="row"><span>Biển số</span><strong>${esc(t.vehiclePlate)}</strong></div>
+                <div class="row"><span>Bãi xe</span><strong>${esc(t.lotName)}</strong></div>
+                <div class="row"><span>Vị trí</span><strong>${esc(t.spot)} (${esc(t.zone)})</strong></div>
+                <div class="row"><span>Tổng tiền</span><strong>${formatMoney(t.totalPrice)}</strong></div>
+                </body></html>
+            `);
+            w.document.close();
+            w.focus();
+            w.print();
+        }
+    </script>
+</body>
+</html>

@@ -8,7 +8,8 @@ function toPublic(user, vehicle) {
         fullName: user.full_name,
         phone: user.phone,
         email: user.email,
-        licensePlate: vehicle ? vehicle.license_plate : null
+        licensePlate: vehicle ? vehicle.license_plate : null,
+        role: user.role
     };
 }
 

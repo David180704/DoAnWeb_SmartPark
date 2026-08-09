@@ -5,7 +5,7 @@ const TOKEN_TTL = '7d';
 
 function signUserToken(user) {
     const id = user.id || user._id;
-    return jwt.sign({ sub: String(id), phone: user.phone }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+    return jwt.sign({ sub: String(id), phone: user.phone, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
 }
 
 function verifyUserToken(token) {

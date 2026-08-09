@@ -1,5 +1,7 @@
 const { verifyUserToken } = require('../utils/jwt');
 
+const STAFF_ROLES = ['STAFF', 'ADMIN'];
+
 function getTokenFromHeader(req) {
     const header = req.headers.authorization || '';
     const [scheme, token] = header.split(' ');
@@ -15,10 +17,20 @@ function requireAuth(req, res, next) {
     try {
         const payload = verifyUserToken(token);
         req.userId = payload.sub;
+        req.userRole = payload.role;
         next();
     } catch (err) {
         return res.status(401).json({ message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
     }
+}
+
+function requireStaff(req, res, next) {
+    requireAuth(req, res, () => {
+        if (!STAFF_ROLES.includes(req.userRole)) {
+            return res.status(403).json({ message: 'Chỉ nhân viên mới có thể thực hiện thao tác này.' });
+        }
+        next();
+    });
 }
 
 function optionalAuth(req, res, next) {
@@ -27,6 +39,7 @@ function optionalAuth(req, res, next) {
         try {
             const payload = verifyUserToken(token);
             req.userId = payload.sub;
+            req.userRole = payload.role;
         } catch (err) {
             // ignore invalid token, treat as anonymous
         }
@@ -34,4 +47,4 @@ function optionalAuth(req, res, next) {
     next();
 }
 
-module.exports = { requireAuth, optionalAuth };
+module.exports = { requireAuth, requireStaff, optionalAuth };
