@@ -194,14 +194,14 @@
                     <div class="staff-row"><span>Vị trí</span><strong>${esc(t.spot)} (${esc(t.zone)})</strong></div>
                     <div class="staff-row"><span>Số giờ dự kiến</span><strong>${t.expectedHours} giờ</strong></div>
                     <div class="staff-row"><span>Đặt lúc</span><strong>${formatDateTime(t.bookingTime)}</strong></div>
-                    <div class="staff-row"><span>Check-in</span><strong>${formatDateTime(t.checkInTime)}</strong></div>
-                    <div class="staff-row"><span>Check-out</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>
+                    <div class="staff-row"><span>Giờ vào bãi</span><strong>${formatDateTime(t.checkInTime)}</strong></div>
+                    <div class="staff-row"><span>Giờ ra bãi</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>
                     <div class="staff-row"><span>Thanh toán</span><strong>${t.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : 'Chưa thanh toán'} · ${formatMoney(t.totalPrice)}</strong></div>
                     ${t.qrCodeUrl ? `<img src="${t.qrCodeUrl}" class="staff-qr-img" alt="QR thanh toán">` : ''}
                     <div class="staff-actions">
                         <button type="button" class="btn btn-primary" data-action="confirm-payment" ${t.paymentStatus === 'SUCCESS' ? 'disabled' : ''}>Xác nhận thanh toán</button>
-                        <button type="button" class="btn btn-primary" data-action="check-in" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Check-in</button>
-                        <button type="button" class="btn btn-primary" data-action="check-out" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Check-out</button>
+                        <button type="button" class="btn btn-primary" data-action="check-in" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Xác nhận vào bãi</button>
+                        <button type="button" class="btn btn-primary" data-action="check-out" ${t.status !== 'ACTIVE' ? 'disabled' : ''}>Xác nhận ra bãi</button>
                         <button type="button" class="btn btn-secondary" data-action="print">In vé</button>
                     </div>
                 </div>
