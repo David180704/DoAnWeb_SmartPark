@@ -6,6 +6,7 @@
     <title><%= lotName %> - SmartPark</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/parking.css">
+    <link rel="stylesheet" href="/css/auth-header.css">
 </head>
 <body>
 
@@ -187,28 +188,19 @@
         <main class="parking-main">
             <!-- TAB CHỌN KHU -->
             <div class="zone-tabs">
+                <button class="zone-btn active" data-zone="all" onclick="filterZone('all', this)">
+                    Tất cả
+                </button>
                 <% zones.forEach(zone => { %>
-                    <button class="zone-btn" onclick="filterZone('<%= zone %>')">
+                    <button class="zone-btn" data-zone="<%= zone %>" onclick="filterZone('<%= zone %>', this)">
                         <%= zone %>
                     </button>
                 <% }); %>
             </div>
 
-            <!-- PARKING GRID -->
+            <!-- PARKING GRID (loaded from real data) -->
             <div class="parking-grid" id="parking-grid">
-                <% for (let i = 1; i <= 30; i++) { %>
-                    <div class="parking-slot available" onclick="selectSlot(this, 'A<%= i %>')">
-                        <div class="slot-number">A<%= i %></div>
-                        <div class="slot-status">Trống</div>
-                        <div class="slot-price">₫<%= pricePerHour.toLocaleString() %></div>
-                    </div>
-                <% } %>
-                <% for (let i = 1; i <= 5; i++) { %>
-                    <div class="parking-slot occupied">
-                        <div class="slot-number">Đã đặt</div>
-                        <div class="slot-status">Hết</div>
-                    </div>
-                <% } %>
+                <p class="sp-loading">Đang tải sơ đồ chỗ đỗ...</p>
             </div>
 
             <!-- LEGEND -->
@@ -236,9 +228,13 @@
     </div>
 
     <!-- JAVASCRIPT -->
+    <script src="/js/auth-header.js"></script>
     <script>
         const pricePerHour = <%= pricePerHour %>;
-        const selectedSlots = new Set();
+        const lotId = '<%= lotId %>';
+        let selectedSlot = null;
+        let currentZone = 'all';
+        let allSlots = [];
 
         // Set default date
         document.getElementById('parking-date').valueAsDate = new Date();
@@ -268,70 +264,122 @@
             }
         }
 
-        // Select parking slot
-        function selectSlot(element, slotCode) {
-            if (element.classList.contains('occupied')) return;
+        function getExpectedHours() {
+            return Number(document.getElementById('hours-calc').textContent) || 1;
+        }
 
-            element.classList.toggle('selected');
-            
-            if (element.classList.contains('selected')) {
-                selectedSlots.add(slotCode);
-            } else {
-                selectedSlots.delete(slotCode);
+        // Render the slot grid from real data, respecting the active zone filter
+        function renderGrid() {
+            const grid = document.getElementById('parking-grid');
+            const visible = currentZone === 'all' ? allSlots : allSlots.filter(s => s.zone === currentZone);
+
+            if (visible.length === 0) {
+                grid.innerHTML = '<p class="sp-empty">Không có chỗ nào trong khu vực này.</p>';
+                return;
             }
 
+            grid.innerHTML = visible.map(s => {
+                const isSelected = selectedSlot === s.code;
+                const cls = ['parking-slot', s.status, isSelected ? 'selected' : ''].filter(Boolean).join(' ');
+                const label = s.status === 'available' ? (isSelected ? 'Đã chọn' : 'Trống') : (s.status === 'reserved' ? 'Đang giữ chỗ' : 'Đã đặt');
+                return `
+                    <div class="${cls}" data-code="${s.code}" onclick="selectSlot('${s.code}')">
+                        <div class="slot-number">${s.code}</div>
+                        <div class="slot-status">${label}</div>
+                        ${s.status === 'available' ? `<div class="slot-price">₫${pricePerHour.toLocaleString()}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadSlots() {
+            try {
+                const res = await fetch(`/api/parking-lots/${lotId}/slots`);
+                if (!res.ok) throw new Error('Failed to load slots');
+                const data = await res.json();
+                allSlots = data.slots;
+                renderGrid();
+            } catch (err) {
+                console.error(err);
+                document.getElementById('parking-grid').innerHTML = '<p class="sp-empty">Không thể tải sơ đồ chỗ đỗ lúc này.</p>';
+            }
+        }
+
+        // Select a single parking slot (a ticket covers exactly one spot)
+        function selectSlot(code) {
+            const slot = allSlots.find(s => s.code === code);
+            if (!slot || slot.status !== 'available') return;
+
+            selectedSlot = (selectedSlot === code) ? null : code;
+            renderGrid();
             updateSelectedSummary();
         }
 
-        // Update selected slots display
         function updateSelectedSummary() {
             const summary = document.getElementById('selected-summary');
             const list = document.getElementById('selected-slots-list');
 
-            if (selectedSlots.size > 0) {
+            if (selectedSlot) {
                 summary.style.display = 'flex';
-                list.textContent = Array.from(selectedSlots).join(', ');
+                list.textContent = selectedSlot;
             } else {
                 summary.style.display = 'none';
             }
         }
 
         // Filter by zone
-        function filterZone(zone) {
-            // Implementation for zone filtering
-            alert('Lọc theo ' + zone);
+        function filterZone(zone, btn) {
+            currentZone = zone;
+            document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderGrid();
         }
 
         // Form submission
-        document.getElementById('parking-form').addEventListener('submit', (e) => {
+        document.getElementById('parking-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Check if user is logged in
-            const userStr = localStorage.getItem('smartpark_user');
-            if (!userStr) {
+            if (!SmartParkAuth.getToken()) {
                 alert('Bạn cần đăng nhập để thực hiện đặt chỗ!');
                 window.location.href = `/login?redirect=${encodeURIComponent(window.location.href)}`;
                 return;
             }
 
-            if (selectedSlots.size === 0) {
-                alert('Vui lòng chọn ít nhất 1 chỗ đậu');
+            if (!selectedSlot) {
+                alert('Vui lòng chọn 1 chỗ đậu');
                 return;
             }
 
             const formData = new FormData(e.target);
-            const data = {
-                plate: formData.get('plate'),
-                vehicleType: formData.get('vehicleType'),
-                date: formData.get('date'),
-                startTime: formData.get('startTime'),
-                endTime: formData.get('endTime'),
-                slots: Array.from(selectedSlots),
-                totalPrice: document.getElementById('total-price').textContent
-            };
+            const submitBtn = e.target.querySelector('.btn-book');
+            submitBtn.disabled = true;
 
-            // Redirect to checkout
-            window.location.href = `/checkout?${new URLSearchParams(data).toString()}`;
+            try {
+                const res = await SmartParkAuth.authFetch('/api/tickets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lotId,
+                        spotCode: selectedSlot,
+                        vehicleType: formData.get('vehicleType'),
+                        expectedHours: getExpectedHours()
+                    })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || 'Không thể đặt chỗ. Vui lòng thử lại.');
+                    if (res.status === 409) loadSlots();
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                window.location.href = `/banking-qr?code=${encodeURIComponent(data.code)}`;
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+                submitBtn.disabled = false;
+            }
         });
 
         // Event listeners
@@ -340,34 +388,12 @@
 
         // Initialize
         updateHours();
+        loadSlots();
 
-        // Update header & autofill plate if user is logged in
-        const userStr = localStorage.getItem('smartpark_user');
-        if (userStr) {
-            try {
-                const user = JSON.parse(userStr);
-                
-                // Header
-                const authButtons = document.querySelector('.auth-buttons');
-                if (authButtons) {
-                    authButtons.innerHTML = `
-                        <span style="color: white; margin-right: 15px; font-weight: 500;">👋 Chào, ${user.fullName} (${user.licensePlate})</span>
-                        <button onclick="logout()" class="btn-login" style="cursor: pointer; border: none; background: #e11d48; padding: 6px 15px; border-radius: 4px; color: white;">Đăng xuất</button>
-                    `;
-                }
-
-                // Plate Autofill
-                if (user.licensePlate) {
-                    document.getElementById('plate').value = user.licensePlate;
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        function logout() {
-            localStorage.removeItem('smartpark_user');
-            window.location.reload();
+        // Autofill plate if user is logged in
+        const currentUser = SmartParkAuth.getUser();
+        if (currentUser && currentUser.licensePlate) {
+            document.getElementById('plate').value = currentUser.licensePlate;
         }
     </script>
 </body>

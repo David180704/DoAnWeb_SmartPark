@@ -1,50 +1,24 @@
 const express = require('express');
 const path = require('path');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const { parkingLots } = require('./models/parkingLot');
-const User = require('./models/User');
-
-let isDatabaseConnected = false;
-
-const usersFallback = [
-    {
-        id: 'user-default',
-        fullName: 'Nguyễn Hoàng Long',
-        phone: '0909123456',
-        email: 'long.nguyen@smartpark.vn',
-        licensePlate: '30F-123.45',
-        password: bcrypt.hashSync('123456', 10)
-    }
-];
+const { requireAuth } = require('./middleware/auth');
+const { signUserToken } = require('./utils/jwt');
+const { BANK_INFO, buildMemoContent } = require('./utils/payment');
+const userRepository = require('./repositories/userRepository');
+const parkingRepository = require('./repositories/parkingRepository');
+const ticketRepository = require('./repositories/ticketRepository');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (MONGODB_URI) {
     mongoose.connect(MONGODB_URI)
-        .then(async () => {
-            isDatabaseConnected = true;
-            try {
-                const count = await User.countDocuments();
-                if (count === 0) {
-                    await User.create({
-                        fullName: 'Nguyễn Hoàng Long',
-                        phone: '0909123456',
-                        email: 'long.nguyen@smartpark.vn',
-                        licensePlate: '30F-123.45',
-                        password: bcrypt.hashSync('123456', 10)
-                    });
-                }
-            } catch (seedErr) {
-                console.error('Seed error:', seedErr.message);
-            }
-        })
         .catch(err => {
-            console.error('Database connection failed. Using fallback.', err.message);
+            console.error('Database connection failed. Using in-memory fallback data.', err.message);
         });
+} else {
+    console.warn('MONGODB_URI is not set. Using in-memory fallback data.');
 }
 
 const app = express();
@@ -57,108 +31,193 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-function getParkingLotById(id) {
-    return parkingLots.find(lot => lot.id === id);
+function stripInternal(ticket) {
+    const { _ticketDoc, _transactionDoc, _fallback, ...clean } = ticket;
+    return clean;
 }
 
-// REGISTER API
+// ===================== AUTH API =====================
+
 app.post('/api/auth/register', async (req, res) => {
     const { fullName, phone, email, licensePlate, password } = req.body;
-    
+
     if (!fullName || !phone || !email || !licensePlate || !password) {
         return res.status(400).json({ message: 'Vui lòng điền đầy đủ tất cả các thông tin đăng ký.' });
     }
-    
-    if (isDatabaseConnected) {
-        try {
-            const existingUser = await User.findOne({ phone });
-            if (existingUser) {
-                return res.status(400).json({ message: 'Số điện thoại này đã được đăng ký trên hệ thống.' });
-            }
-            
-            const newUser = await User.create({
-                fullName,
-                phone,
-                email,
-                licensePlate: licensePlate.toUpperCase(),
-                password: bcrypt.hashSync(password, 10)
-            });
-            
-            const userResponse = {
-                id: newUser._id,
-                fullName: newUser.fullName,
-                phone: newUser.phone,
-                email: newUser.email,
-                licensePlate: newUser.licensePlate
-            };
-            return res.json(userResponse);
-        } catch (dbErr) {
-            console.error('Lỗi khi đăng ký vào MongoDB:', dbErr);
-            return res.status(500).json({ message: 'Lỗi cơ sở dữ liệu MongoDB khi đăng ký.' });
-        }
-    } else {
-        // Fallback sử dụng Local In-Memory
-        const existingUser = usersFallback.find(u => u.phone === phone);
+
+    try {
+        const existingUser = await userRepository.findByPhone(phone);
         if (existingUser) {
             return res.status(400).json({ message: 'Số điện thoại này đã được đăng ký trên hệ thống.' });
         }
-        
-        const newUser = {
-            id: 'user-' + Math.random().toString(36).substr(2, 9),
-            fullName,
-            phone,
-            email,
-            licensePlate: licensePlate.toUpperCase(),
-            password: bcrypt.hashSync(password, 10)
-        };
-        
-        usersFallback.push(newUser);
-        const { password: _, ...userResponse } = newUser;
-        return res.json(userResponse);
+
+        const { user, vehicle } = await userRepository.createUser({ fullName, phone, email, licensePlate, password });
+        const userResponse = userRepository.toPublic(user, vehicle);
+        const token = signUserToken(userResponse);
+
+        return res.json({ user: userResponse, token });
+    } catch (err) {
+        if (err.code === 'PLATE_TAKEN') {
+            return res.status(400).json({ message: 'Biển số xe này đã được đăng ký trên hệ thống.' });
+        }
+        console.error('Lỗi khi đăng ký:', err);
+        return res.status(500).json({ message: 'Lỗi hệ thống khi đăng ký.' });
     }
 });
 
 app.post('/api/auth/login', async (req, res) => {
     const { phone, password } = req.body;
-    
+
     if (!phone || !password) {
         return res.status(400).json({ message: 'Vui lòng nhập số điện thoại và mật khẩu.' });
     }
-    
-    if (isDatabaseConnected) {
-        try {
-            const user = await User.findOne({ phone });
-            if (!user || !bcrypt.compareSync(password, user.password)) {
-                return res.status(400).json({ message: 'Số điện thoại hoặc mật khẩu không chính xác.' });
-            }
-            
-            const userResponse = {
-                id: user._id,
-                fullName: user.fullName,
-                phone: user.phone,
-                email: user.email,
-                licensePlate: user.licensePlate
-            };
-            return res.json(userResponse);
-        } catch (dbErr) {
-            console.error(dbErr);
-            return res.status(500).json({ message: 'Database error.' });
-        }
-    } else {
-        const user = usersFallback.find(u => u.phone === phone);
-        if (!user || !bcrypt.compareSync(password, user.password)) {
+
+    try {
+        const user = await userRepository.findByPhone(phone);
+        if (!user || !userRepository.verifyPassword(password, user.password)) {
             return res.status(400).json({ message: 'Số điện thoại hoặc mật khẩu không chính xác.' });
         }
-        
-        const { password: _, ...userResponse } = user;
-        return res.json(userResponse);
+
+        const vehicle = await userRepository.getDefaultVehicle(String(user._id || user.id));
+        const userResponse = userRepository.toPublic(user, vehicle);
+        const token = signUserToken(userResponse);
+
+        return res.json({ user: userResponse, token });
+    } catch (err) {
+        console.error('Lỗi khi đăng nhập:', err);
+        return res.status(500).json({ message: 'Lỗi hệ thống khi đăng nhập.' });
     }
 });
 
-app.get('/', (req, res) => {
-    res.render('index', { 
+app.get('/api/me', requireAuth, async (req, res) => {
+    try {
+        const user = await userRepository.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+        }
+        const vehicle = await userRepository.getDefaultVehicle(req.userId);
+        return res.json(userRepository.toPublic(user, vehicle));
+    } catch (err) {
+        console.error('Lỗi khi lấy thông tin người dùng:', err);
+        return res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+// ===================== PARKING LOT API =====================
+
+app.get('/api/parking-lots', async (req, res) => {
+    try {
+        const lots = await parkingRepository.listLots();
+        res.json(lots);
+    } catch (err) {
+        console.error('Lỗi khi tải danh sách bãi xe:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/parking-lots/:lotId', async (req, res) => {
+    try {
+        const lot = await parkingRepository.getLot(req.params.lotId);
+        if (!lot) return res.status(404).json({ error: 'Bãi xe không tìm thấy' });
+        res.json(lot);
+    } catch (err) {
+        console.error('Lỗi khi tải bãi xe:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/parking-lots/:lotId/slots', async (req, res) => {
+    try {
+        const data = await parkingRepository.getLotSlots(req.params.lotId);
+        if (!data) return res.status(404).json({ error: 'Bãi xe không tìm thấy' });
+        res.json(data);
+    } catch (err) {
+        console.error('Lỗi khi tải sơ đồ chỗ đỗ:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+// ===================== TICKET (BOOKING) API =====================
+
+app.post('/api/tickets', requireAuth, async (req, res) => {
+    const { lotId, spotCode, vehicleType, expectedHours } = req.body;
+
+    if (!lotId || !spotCode || !expectedHours) {
+        return res.status(400).json({ message: 'Thiếu thông tin đặt chỗ.' });
+    }
+
+    try {
+        const ticket = await ticketRepository.createTicket(req.userId, {
+            lotId,
+            spotCode,
+            vehicleType,
+            expectedHours: Number(expectedHours)
+        });
+        return res.json(stripInternal(ticket));
+    } catch (err) {
+        if (err.code === 'SPOT_UNAVAILABLE') {
+            return res.status(409).json({ message: 'Chỗ này vừa được người khác đặt. Vui lòng chọn chỗ khác.' });
+        }
+        if (err.code === 'LOT_NOT_FOUND') {
+            return res.status(404).json({ message: 'Bãi xe không tìm thấy.' });
+        }
+        if (err.code === 'NO_VEHICLE') {
+            return res.status(400).json({ message: 'Tài khoản chưa có biển số xe đăng ký.' });
+        }
+        console.error('Lỗi khi tạo đặt chỗ:', err);
+        return res.status(500).json({ message: 'Lỗi hệ thống khi đặt chỗ.' });
+    }
+});
+
+app.get('/api/tickets/me', requireAuth, async (req, res) => {
+    try {
+        const result = await ticketRepository.findByUser(req.userId);
+        res.json({
+            current: result.current.map(stripInternal),
+            history: result.history.map(stripInternal)
+        });
+    } catch (err) {
+        console.error('Lỗi khi tải lịch sử đặt chỗ:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/tickets/:code', requireAuth, async (req, res) => {
+    try {
+        const ticket = await ticketRepository.findByCode(req.params.code, req.userId);
+        if (!ticket) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(ticket));
+    } catch (err) {
+        console.error('Lỗi khi tải vé:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.post('/api/tickets/:code/confirm-payment', requireAuth, async (req, res) => {
+    try {
+        const updated = await ticketRepository.confirmPayment(req.params.code, req.userId);
+        if (!updated) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json(stripInternal(updated));
+    } catch (err) {
+        if (err.code === 'ALREADY_PROCESSED') {
+            return res.status(400).json({ message: 'Vé này đã được xử lý.' });
+        }
+        console.error('Lỗi khi xác nhận thanh toán:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống khi xác nhận thanh toán.' });
+    }
+});
+
+// ===================== PAGES =====================
+
+app.get('/', async (req, res) => {
+    const parkingLots = await parkingRepository.listLots();
+    res.render('index', {
         title: 'Hệ thống SmartPark',
-        parkingLots: parkingLots 
+        parkingLots
     });
 });
 
@@ -166,14 +225,14 @@ app.get('/login', (req, res) => {
     res.render('login', { title: 'Đăng Nhập - SmartPark' });
 });
 
-app.get('/parking/:lotId', (req, res) => {
-    const lot = getParkingLotById(req.params.lotId);
-    
+app.get('/parking/:lotId', async (req, res) => {
+    const lot = await parkingRepository.getLot(req.params.lotId);
+
     if (!lot) {
         return res.status(404).render('404', { message: 'Bãi xe không tìm thấy' });
     }
 
-    res.render('parking', { 
+    res.render('parking', {
         title: `${lot.name} - SmartPark`,
         lotId: lot.id,
         lotName: lot.name,
@@ -189,53 +248,26 @@ app.get('/parking/:lotId', (req, res) => {
     });
 });
 
-app.get('/api/parking-lots', (req, res) => {
-    res.json(parkingLots);
-});
-
-app.get('/api/parking-lots/:lotId', (req, res) => {
-    const lot = getParkingLotById(req.params.lotId);
-    if (!lot) {
-        return res.status(404).json({ error: 'Bãi xe không tìm thấy' });
+app.get('/banking-qr', async (req, res) => {
+    const code = req.query.code;
+    if (!code) {
+        return res.status(400).render('404', { message: 'Thiếu mã vé. Vui lòng đặt chỗ lại từ trang bãi xe.' });
     }
-    res.json(lot);
-});
 
-app.get('/checkout', (req, res) => {
-    let spot = req.query.spot || req.query.slots;
-    if (Array.isArray(spot)) {
-        spot = spot.join(', ');
-    } else if (typeof spot === 'string') {
-        // ok
-    } else {
-        spot = 'Chưa chọn';
+    const ticket = await ticketRepository.findByCode(code);
+    if (!ticket) {
+        return res.status(404).render('404', { message: 'Không tìm thấy vé đặt chỗ.' });
     }
-    
-    const price = req.query.price || req.query.totalPrice || '0';
-    res.render('checkout', { spot, price });
-});
 
-app.get('/banking-qr', (req, res) => {
-    const booking = {
-        id: req.query.id || 'BOOK' + Math.random().toString(36).slice(2,10).toUpperCase(),
-        totalPrice: Number(req.query.amount) || 150000
-    };
-
-    const bankName = 'Vietcombank (VCB)';
-    const accountNumber = '1018827182738';
-    const accountHolder = 'CONG TY CO PHAN DO XE THONG MINH SMARTPARK VIETNAM';
-    const memoContent = `PARK${booking.id.slice(-6).toUpperCase()}`;
-    const binCode = '970436';
-    const qrUrl = `https://api.vietqr.io/image/${binCode}-${accountNumber}-compact.jpg?accountName=${encodeURIComponent(accountHolder)}&amount=${booking.totalPrice}&addInfo=${encodeURIComponent(memoContent)}`;
-    const formattedPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(booking.totalPrice);
+    const formattedPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(ticket.totalPrice);
 
     res.render('bankingQR', {
-        booking,
-        bankName,
-        accountNumber,
-        accountHolder,
-        memoContent,
-        qrUrl,
+        ticket: stripInternal(ticket),
+        bankName: BANK_INFO.bankName,
+        accountNumber: BANK_INFO.accountNumber,
+        accountHolder: BANK_INFO.accountHolder,
+        memoContent: buildMemoContent(ticket.code),
+        qrUrl: ticket.qrCodeUrl,
         formattedPrice
     });
 });

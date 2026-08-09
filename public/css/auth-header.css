@@ -1,0 +1,135 @@
+/* public/css/auth-header.css — shared user dropdown widget */
+.sp-user-widget {
+  position: relative;
+  display: inline-block;
+}
+
+.sp-user-trigger {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 8px 15px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.sp-user-trigger:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.sp-user-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-height: 420px;
+  background: #fff;
+  color: #333;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  z-index: 2000;
+  text-align: left;
+}
+
+.sp-tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+}
+
+.sp-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 12px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #777;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.sp-tab.active {
+  color: var(--primary-green, #10b981);
+  border-bottom-color: var(--primary-green, #10b981);
+}
+
+.sp-tab-content {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.sp-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f4f4f4;
+  font-size: 13px;
+}
+
+.sp-info-row span {
+  color: #888;
+}
+
+.sp-ticket-row {
+  padding: 10px 0;
+  border-bottom: 1px solid #f4f4f4;
+}
+
+.sp-ticket-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.sp-ticket-sub {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.sp-ticket-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+  background: #f0f0f0;
+  color: #555;
+}
+
+.sp-status-pending { background: #fef3c7; color: #92400e; }
+.sp-status-active { background: #d1fae5; color: #065f46; }
+.sp-status-completed { background: #e0e7ff; color: #3730a3; }
+.sp-status-cancelled { background: #fee2e2; color: #991b1b; }
+
+.sp-empty, .sp-loading {
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.sp-logout-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-top: 1px solid #eee;
+  background: #fff5f5;
+  color: #e11d48;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sp-logout-btn:hover {
+  background: #ffe4e6;
+}

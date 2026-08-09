@@ -278,8 +278,9 @@
                 }
 
                 // Success
-                localStorage.setItem('smartpark_user', JSON.stringify(data));
-                
+                localStorage.setItem('smartpark_user', JSON.stringify(data.user));
+                localStorage.setItem('smartpark_token', data.token);
+
                 // Check if redirect query parameter exists
                 const urlParams = new URLSearchParams(window.location.search);
                 const redirectUrl = urlParams.get('redirect');

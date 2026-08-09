@@ -6,6 +6,7 @@
   <title>Thanh toán VietQR - SmartPark</title>
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/banking-qr.css">
+  <link rel="stylesheet" href="/css/auth-header.css">
 </head>
 <body>
   <header>
@@ -28,8 +29,8 @@
       <div class="qr-header">
         <h2>Thanh toán bằng VietQR</h2>
         <div class="tx-meta">
-          <span class="tx-id">Mã giao dịch: <strong><%= booking.id %></strong></span>
-          <span class="timer" id="countdown">Hạn: 10:00</span>
+          <span class="tx-id">Mã vé: <strong><%= ticket.code %></strong></span>
+          <span class="timer" id="countdown">Hạn: --:--</span>
         </div>
       </div>
 
@@ -40,6 +41,16 @@
 
         <div class="qr-details">
           <h3>Thông tin thanh toán</h3>
+
+          <div class="detail-row">
+            <div>Bãi xe</div>
+            <div style="text-align:right"><strong><%= ticket.lotName %></strong></div>
+          </div>
+
+          <div class="detail-row">
+            <div>Vị trí đỗ</div>
+            <div><strong><%= ticket.spot %> (<%= ticket.zone %>)</strong></div>
+          </div>
 
           <div class="detail-row">
             <div>Ngân hàng</div>
@@ -146,17 +157,32 @@
     </div>
   </div>
 
-  <script type="application/json" id="booking-data"><%- JSON.stringify({ id: booking.id, formattedPrice: formattedPrice, memoContent: memoContent }).replace(/</g,'\\u003c') %></script>
+  <script type="application/json" id="ticket-data"><%- JSON.stringify({
+      code: ticket.code,
+      lotName: ticket.lotName,
+      lotAddress: ticket.lotAddress,
+      spot: ticket.spot,
+      vehiclePlate: ticket.vehiclePlate,
+      bookingExpiredAt: ticket.bookingExpiredAt,
+      formattedPrice: formattedPrice
+  }).replace(/</g,'\\u003c') %></script>
+  <script src="/js/auth-header.js"></script>
   <script>
-    // Countdown timer (10 minutes)
+    const ticketData = JSON.parse(document.getElementById('ticket-data').textContent);
+
+    // Countdown timer, based on the real booking_expired_at from the server
     (function(){
-      let remaining = 10*60; // seconds
       const el = document.getElementById('countdown');
+      const expiredAt = new Date(ticketData.bookingExpiredAt).getTime();
       function update(){
+        const remaining = Math.max(0, Math.round((expiredAt - Date.now()) / 1000));
         const mm = Math.floor(remaining/60).toString().padStart(2,'0');
         const ss = (remaining%60).toString().padStart(2,'0');
         if(el) el.textContent = 'Hạn: ' + mm + ':' + ss;
-        if(remaining>0) remaining--; else clearInterval(timer);
+        if(remaining<=0){
+          clearInterval(timer);
+          if(el) el.textContent = 'Đã hết hạn';
+        }
       }
       update();
       const timer = setInterval(update,1000);
@@ -177,20 +203,48 @@
       w.print();
     });
 
-    // Simulate payment: show ticket modal
-    document.getElementById('btnPaid')?.addEventListener('click', ()=>{
-      // Fill ticket modal data from server-rendered variables
-      // Pass booking data into client JS safely
-      const bookingData = JSON.parse(document.getElementById('booking-data')?.textContent || '{}');
-      // For demo, set some placeholders (replace with real booking fields if available)
-      document.getElementById('ticketLocation').textContent = (document.querySelector('.logo')?.textContent || 'SmartPark') + ' - Bãi thử';
-      document.getElementById('ticketAddress').textContent = 'Địa chỉ: 123 Đường Demo, Quận 1';
-      document.getElementById('ticketPlate').textContent = '37A-12345';
-      document.getElementById('ticketSlots').textContent = 'B5';
-      document.getElementById('ticketPrice').textContent = bookingData.formattedPrice || '';
-      document.getElementById('ticketCode').textContent = bookingData.id || '';
-      document.getElementById('ticketModal').classList.remove('hidden');
-      document.getElementById('ticketModal').classList.add('flex');
+    // Confirm payment against the real ticket, then show the e-ticket
+    document.getElementById('btnPaid')?.addEventListener('click', async (e)=>{
+      if (!SmartParkAuth.getToken()) {
+        alert('Bạn cần đăng nhập để xác nhận thanh toán.');
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.href)}`;
+        return;
+      }
+
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Đang xác thực giao dịch...';
+
+      try {
+        const res = await SmartParkAuth.authFetch(`/api/tickets/${encodeURIComponent(ticketData.code)}/confirm-payment`, { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.message || 'Không thể xác nhận thanh toán.');
+          btn.disabled = false;
+          btn.textContent = 'Tôi đã chuyển khoản thành công';
+          return;
+        }
+
+        document.getElementById('ticketLocation').textContent = ticketData.lotName;
+        document.getElementById('ticketAddress').textContent = ticketData.lotAddress || '';
+        document.getElementById('ticketPlate').textContent = ticketData.vehiclePlate || '';
+        document.getElementById('ticketSlots').textContent = ticketData.spot;
+        document.getElementById('ticketPrice').textContent = ticketData.formattedPrice;
+        document.getElementById('ticketCode').textContent = ticketData.code;
+        document.getElementById('ticketModal').classList.remove('hidden');
+        document.getElementById('ticketModal').classList.add('flex');
+      } catch (err) {
+        console.error(err);
+        alert('Lỗi kết nối. Vui lòng thử lại.');
+        btn.disabled = false;
+        btn.textContent = 'Tôi đã chuyển khoản thành công';
+      }
+    });
+
+    // Cancel: just go back to browsing this lot
+    document.getElementById('btnSimulateFail')?.addEventListener('click', ()=>{
+      window.location.href = '/';
     });
 
     // Close ticket
@@ -199,6 +253,7 @@
     function closeTicket(){
       document.getElementById('ticketModal').classList.remove('flex');
       document.getElementById('ticketModal').classList.add('hidden');
+      window.location.href = '/';
     }
 
     // Print ticket

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartPark - Đỗ Xe Thông Minh</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/auth-header.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.10.0/dist/leaflet.css" integrity="sha256-sA+e2Hq6aYp3f3qk8Jgvmw9MNuHf6k9g+v+0s+1wE+M=" crossorigin=""/>
 </head>
 <body>
@@ -73,7 +74,7 @@
                     <img src="<%= lot.image %>" class="lot-image" alt="<%= lot.name %>" referrerPolicy="no-referrer">
                     <div class="lot-header">
                       <h3><%= lot.name %></h3>
-                      <div class="lot-badge" id="badge-<%= lot.id %>"><%= lot.getAvailabilityPercent() %>%</div>
+                      <div class="lot-badge" id="badge-<%= lot.id %>"><%= lot.availabilityPercent %>%</div>
                     </div>
 
                     <div class="lot-info">
@@ -101,7 +102,7 @@
                     </div>
 
                     <div class="lot-footer">
-                      <span class="lot-status <%= lot.getStatus() === 'Hết chỗ' ? 'full' : '' %>"><%= lot.getStatus() %></span>
+                      <span class="lot-status <%= lot.status === 'Hết chỗ' ? 'full' : '' %>"><%= lot.status %></span>
                       <span class="lot-cta">Đặt chỗ →</span>
                     </div>
                   </a>
@@ -145,7 +146,7 @@
         <h2 class="section-title">TIN TỨC HOẠT ĐỘNG</h2>
         <div class="card-grid">
             <div class="card">
-                <img src="/images/lap camera.jpg" alt="Lắp camera AI">
+                <img src="/images/lap_camera.jpg" alt="Lắp camera AI">
                 <div class="card-content">
                     <h3>Nâng cấp hệ thống Camera nhận diện biển số AI</h3>
                     <p>SmartPark vừa đưa vào hoạt động hệ thống AI giúp xe ra vào không cần quẹt thẻ vật lý.</p>
@@ -367,27 +368,7 @@
             document.head.appendChild(LScript);
         })();
 
-        // Update header if user is logged in
-        const userStr = localStorage.getItem('smartpark_user');
-        if (userStr) {
-            try {
-                const user = JSON.parse(userStr);
-                const authButtons = document.querySelector('.auth-buttons');
-                if (authButtons) {
-                    authButtons.innerHTML = `
-                        <span style="color: white; margin-right: 15px; font-weight: 500;">👋 Chào, ${user.fullName} (${user.licensePlate})</span>
-                        <button onclick="logout()" class="btn-login" style="cursor: pointer; border: none; background: #e11d48; padding: 6px 15px; border-radius: 4px; color: white;">Đăng xuất</button>
-                    `;
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        function logout() {
-            localStorage.removeItem('smartpark_user');
-            window.location.reload();
-        }
     </script>
+    <script src="/js/auth-header.js"></script>
 </body>
 </html>

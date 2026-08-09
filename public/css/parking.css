@@ -295,6 +295,13 @@
   cursor: not-allowed;
 }
 
+.parking-slot.reserved {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+  cursor: not-allowed;
+}
+
 .slot-number {
   font-weight: 700;
   font-size: 16px;
