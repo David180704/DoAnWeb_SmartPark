@@ -221,11 +221,15 @@ app.post('/api/tickets/:code/confirm-payment', requireAuth, async (req, res) => 
 // (https://<domain>/api/payments/webhook/sepay) and SEPAY_API_KEY in your
 // SePay dashboard after linking a bank account.
 app.post('/api/payments/webhook/sepay', async (req, res) => {
-    const authHeader = req.headers.authorization || '';
-    const expected = `Apikey ${process.env.SEPAY_API_KEY || ''}`;
+    // .trim() guards against a stray trailing space/newline from copy-pasting
+    // the key into Render's env var UI, which would otherwise silently break
+    // an exact string match.
+    const authHeader = (req.headers.authorization || '').trim();
+    const configuredKey = (process.env.SEPAY_API_KEY || '').trim();
+    const expected = `Apikey ${configuredKey}`;
 
-    if (!process.env.SEPAY_API_KEY || authHeader !== expected) {
-        console.warn('SePay webhook: missing/invalid API key.');
+    if (!configuredKey || authHeader !== expected) {
+        console.warn('SePay webhook: missing/invalid API key. Got:', JSON.stringify(authHeader));
         return res.status(401).json({ message: 'Unauthorized' });
     }
 
