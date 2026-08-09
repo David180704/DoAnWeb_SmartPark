@@ -178,6 +178,27 @@ async function confirmPayment(ticketCode, userId) {
     );
 }
 
+// Called from the bank webhook. `suffix` is the 6-char tag extracted from
+// the transfer content (matches the end of a ticket_code, see
+// utils/payment.js#buildMemoContent). Only matches a still-PENDING ticket,
+// and refuses to confirm if the transferred amount doesn't match what was
+// owed, so a mistyped/partial transfer can't mark a ticket as paid.
+async function confirmPaymentByMemo(suffix, amount) {
+    const ticket = await Ticket.findOne({ ticket_code: new RegExp(suffix + '$', 'i'), status: 'PENDING' });
+    if (!ticket) return { matched: false, reason: 'NO_PENDING_TICKET' };
+
+    const transaction = await Transaction.findOne({ ticket_id: ticket._id });
+    if (!transaction || transaction.payment_status === 'SUCCESS') {
+        return { matched: false, reason: 'ALREADY_PAID' };
+    }
+    if (amount != null && Number(amount) !== transaction.total_amount) {
+        return { matched: false, reason: 'AMOUNT_MISMATCH', ticketCode: ticket.ticket_code, expected: transaction.total_amount, received: amount };
+    }
+
+    const updated = await confirmPayment(ticket.ticket_code);
+    return { matched: true, ticket: updated };
+}
+
 // Staff-facing lookup: same as findByCode with no ownership check, plus
 // the customer's name/phone so front-desk staff can identify the driver.
 async function findForStaff(ticketCode) {
@@ -235,4 +256,4 @@ async function checkOut(ticketCode) {
     return { ...found, status: 'COMPLETED', checkOutTime, overtimeMinutes };
 }
 
-module.exports = { createTicket, findByCode, findByUser, confirmPayment, findForStaff, checkIn, checkOut };
+module.exports = { createTicket, findByCode, findByUser, confirmPayment, confirmPaymentByMemo, findForStaff, checkIn, checkOut };

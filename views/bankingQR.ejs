@@ -203,7 +203,21 @@
       w.print();
     });
 
-    // Confirm payment against the real ticket, then show the e-ticket
+    function showSuccessTicket() {
+      document.getElementById('ticketLocation').textContent = ticketData.lotName;
+      document.getElementById('ticketAddress').textContent = ticketData.lotAddress || '';
+      document.getElementById('ticketPlate').textContent = ticketData.vehiclePlate || '';
+      document.getElementById('ticketSlots').textContent = ticketData.spot;
+      document.getElementById('ticketPrice').textContent = ticketData.formattedPrice;
+      document.getElementById('ticketCode').textContent = ticketData.code;
+      document.getElementById('ticketModal').classList.remove('hidden');
+      document.getElementById('ticketModal').classList.add('flex');
+      clearInterval(pollTimer);
+    }
+
+    // Confirm payment against the real ticket, then show the e-ticket.
+    // This is the manual fallback — normally the bank webhook confirms
+    // automatically and the poll below picks it up without this click.
     document.getElementById('btnPaid')?.addEventListener('click', async (e)=>{
       if (!SmartParkAuth.getToken()) {
         alert('Bạn cần đăng nhập để xác nhận thanh toán.');
@@ -226,14 +240,7 @@
           return;
         }
 
-        document.getElementById('ticketLocation').textContent = ticketData.lotName;
-        document.getElementById('ticketAddress').textContent = ticketData.lotAddress || '';
-        document.getElementById('ticketPlate').textContent = ticketData.vehiclePlate || '';
-        document.getElementById('ticketSlots').textContent = ticketData.spot;
-        document.getElementById('ticketPrice').textContent = ticketData.formattedPrice;
-        document.getElementById('ticketCode').textContent = ticketData.code;
-        document.getElementById('ticketModal').classList.remove('hidden');
-        document.getElementById('ticketModal').classList.add('flex');
+        showSuccessTicket();
       } catch (err) {
         console.error(err);
         alert('Lỗi kết nối. Vui lòng thử lại.');
@@ -241,6 +248,20 @@
         btn.textContent = 'Tôi đã chuyển khoản thành công';
       }
     });
+
+    // Poll for automatic confirmation from the bank webhook, so the
+    // customer doesn't have to click anything once they've actually paid.
+    const pollTimer = setInterval(async () => {
+      if (!SmartParkAuth.getToken()) return;
+      try {
+        const res = await SmartParkAuth.authFetch(`/api/tickets/${encodeURIComponent(ticketData.code)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.paymentStatus === 'SUCCESS') showSuccessTicket();
+      } catch (err) {
+        // ignore transient polling errors
+      }
+    }, 4000);
 
     // Cancel: just go back to browsing this lot
     document.getElementById('btnSimulateFail')?.addEventListener('click', ()=>{

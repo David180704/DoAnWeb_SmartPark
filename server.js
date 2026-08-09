@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const { requireAuth, requireStaff } = require('./middleware/auth');
 const { signUserToken } = require('./utils/jwt');
-const { BANK_INFO, buildMemoContent } = require('./utils/payment');
+const { BANK_INFO, buildMemoContent, extractMemoSuffix } = require('./utils/payment');
 const userRepository = require('./repositories/userRepository');
 const parkingRepository = require('./repositories/parkingRepository');
 const ticketRepository = require('./repositories/ticketRepository');
@@ -211,6 +211,54 @@ app.post('/api/tickets/:code/confirm-payment', requireAuth, async (req, res) => 
         }
         console.error('Lỗi khi xác nhận thanh toán:', err);
         res.status(500).json({ message: 'Lỗi hệ thống khi xác nhận thanh toán.' });
+    }
+});
+
+// ===================== PAYMENT WEBHOOK (SePay) =====================
+// SePay watches a real bank account and POSTs here the moment a matching
+// transfer lands, so payment gets confirmed automatically instead of
+// relying on someone clicking "Tôi đã thanh toán". Configure this URL
+// (https://<domain>/api/payments/webhook/sepay) and SEPAY_API_KEY in your
+// SePay dashboard after linking a bank account.
+app.post('/api/payments/webhook/sepay', async (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const expected = `Apikey ${process.env.SEPAY_API_KEY || ''}`;
+
+    if (!process.env.SEPAY_API_KEY || authHeader !== expected) {
+        console.warn('SePay webhook: missing/invalid API key.');
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    console.log('SePay webhook payload:', JSON.stringify(req.body));
+
+    const body = req.body || {};
+    const content = body.content || body.description || '';
+    const amount = body.transferAmount ?? body.amount;
+    const transferType = body.transferType || body.type;
+
+    // Only react to money coming IN; ignore outgoing transactions on the
+    // same account if SePay reports those too.
+    if (transferType && transferType !== 'in') {
+        return res.json({ success: true, ignored: 'not_incoming' });
+    }
+
+    const suffix = extractMemoSuffix(content);
+    if (!suffix) {
+        console.warn('SePay webhook: no PARK<code> tag found in content:', content);
+        return res.json({ success: true, ignored: 'no_memo_match' });
+    }
+
+    try {
+        const result = await ticketRepository.confirmPaymentByMemo(suffix, amount);
+        if (!result.matched) {
+            console.warn('SePay webhook: did not auto-confirm a ticket.', result);
+        } else {
+            console.log('SePay webhook: confirmed payment for ticket', result.ticket.code);
+        }
+        res.json({ success: true, matched: result.matched });
+    } catch (err) {
+        console.error('Lỗi xử lý webhook thanh toán:', err);
+        res.status(500).json({ success: false });
     }
 });
 

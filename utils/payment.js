@@ -14,4 +14,13 @@ function buildMemoContent(ticketCode) {
     return `PARK${String(ticketCode).slice(-6).toUpperCase()}`;
 }
 
-module.exports = { BANK_INFO, buildQrUrl, buildMemoContent };
+// Banks often prepend/append extra text to the transfer content the
+// customer's app sends (branch codes, "chuyen tien", accents stripped,
+// etc), so search for the PARK<6 chars> tag anywhere in the string
+// rather than requiring an exact match.
+function extractMemoSuffix(content) {
+    const match = /PARK([A-Z0-9]{6})/i.exec(String(content || '').toUpperCase());
+    return match ? match[1] : null;
+}
+
+module.exports = { BANK_INFO, buildQrUrl, buildMemoContent, extractMemoSuffix };
