@@ -12,14 +12,17 @@ const ticketRepository = require('./repositories/ticketRepository');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-if (MONGODB_URI) {
-    mongoose.connect(MONGODB_URI)
-        .catch(err => {
-            console.error('Database connection failed. Using in-memory fallback data.', err.message);
-        });
-} else {
-    console.warn('MONGODB_URI is not set. Using in-memory fallback data.');
+if (!MONGODB_URI) {
+    console.error('MONGODB_URI is not set. This app requires a real database connection to run.');
+    process.exit(1);
 }
+
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB.'))
+    .catch(err => {
+        console.error('MongoDB connection failed:', err.message);
+        process.exit(1);
+    });
 
 const app = express();
 const PORT = process.env.PORT || 3000;

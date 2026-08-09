@@ -121,43 +121,20 @@
                         </select>
                     </div>
 
-                    <!-- Ngày đặt -->
+                    <!-- Số giờ dự kiến (đặt chỗ áp dụng ngay từ lúc đặt, không chọn giờ vào/ra) -->
                     <div class="form-group">
-                        <label for="parking-date">Ngày Đặt</label>
-                        <input 
-                            type="date" 
-                            id="parking-date"
-                            name="date"
-                            required
-                        >
-                    </div>
-
-                    <!-- Thời gian -->
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="start-time">Giờ Vào</label>
-                            <input 
-                                type="time" 
-                                id="start-time"
-                                name="startTime"
-                                required
-                            >
-                        </div>
-                        <div class="form-group">
-                            <label for="end-time">Giờ Ra</label>
-                            <input 
-                                type="time" 
-                                id="end-time"
-                                name="endTime"
-                                required
-                            >
-                        </div>
-                    </div>
-
-                    <!-- Thống kê giờ -->
-                    <div class="hours-summary">
-                        <span class="hours-label">Thời gian:</span>
-                        <span class="hours-value"><span id="hours-display">3</span> giờ</span>
+                        <label for="expected-hours">Số Giờ Dự Kiến Đỗ</label>
+                        <select id="expected-hours" name="expectedHours" required>
+                            <option value="1">1 giờ</option>
+                            <option value="2">2 giờ</option>
+                            <option value="3" selected>3 giờ</option>
+                            <option value="4">4 giờ</option>
+                            <option value="6">6 giờ</option>
+                            <option value="8">8 giờ</option>
+                            <option value="12">12 giờ</option>
+                            <option value="24">24 giờ (qua đêm)</option>
+                        </select>
+                        <p class="hint">Chỗ được giữ trong 30 phút để bạn thanh toán, tính từ lúc đặt.</p>
                     </div>
 
                     <!-- Giá tiền -->
@@ -236,36 +213,17 @@
         let currentZone = 'all';
         let allSlots = [];
 
-        // Set default date
-        document.getElementById('parking-date').valueAsDate = new Date();
-
-        // Calculate hours and price
+        // Update the price preview when the expected-hours selection changes.
+        // Booking always starts now — there is no user-editable start/end time.
         function updateHours() {
-            const startTime = document.getElementById('start-time').value;
-            const endTime = document.getElementById('end-time').value;
-
-            if (startTime && endTime) {
-                const [startH, startM] = startTime.split(':').map(Number);
-                const [endH, endM] = endTime.split(':').map(Number);
-
-                let startDecimal = startH + startM / 60;
-                let endDecimal = endH + endM / 60;
-
-                if (endDecimal <= startDecimal) {
-                    endDecimal = startDecimal + 1;
-                }
-
-                const hours = Math.ceil((endDecimal - startDecimal) * 10) / 10;
-                const totalPrice = Math.round(pricePerHour * hours);
-
-                document.getElementById('hours-display').textContent = hours;
-                document.getElementById('hours-calc').textContent = hours;
-                document.getElementById('total-price').textContent = '₫' + totalPrice.toLocaleString();
-            }
+            const hours = getExpectedHours();
+            const totalPrice = Math.round(pricePerHour * hours);
+            document.getElementById('hours-calc').textContent = hours;
+            document.getElementById('total-price').textContent = '₫' + totalPrice.toLocaleString();
         }
 
         function getExpectedHours() {
-            return Number(document.getElementById('hours-calc').textContent) || 1;
+            return Number(document.getElementById('expected-hours').value) || 1;
         }
 
         // Render the slot grid from real data, respecting the active zone filter
@@ -383,8 +341,7 @@
         });
 
         // Event listeners
-        document.getElementById('start-time').addEventListener('change', updateHours);
-        document.getElementById('end-time').addEventListener('change', updateHours);
+        document.getElementById('expected-hours').addEventListener('change', updateHours);
 
         // Initialize
         updateHours();
