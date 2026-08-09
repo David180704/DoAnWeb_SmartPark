@@ -1,8 +1,8 @@
 const BANK_INFO = {
-    bankName: 'Vietcombank (VCB)',
-    accountNumber: '1018827182738',
-    accountHolder: 'CONG TY CO PHAN DO XE THONG MINH SMARTPARK VIETNAM',
-    binCode: '970436'
+    bankName: 'Sacombank',
+    accountNumber: '0966440486',
+    accountHolder: 'DO KIM THANH',
+    binCode: '970403' // Sacombank's VietQR/Napas BIN — double-check against the real QR SePay generates
 };
 
 function buildQrUrl(ticketCode, amount) {
