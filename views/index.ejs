@@ -75,7 +75,11 @@
                     <img src="<%= lot.image %>" class="lot-image" alt="<%= lot.name %>" referrerPolicy="no-referrer">
                     <div class="lot-header">
                       <h3><%= lot.name %></h3>
-                      <div class="lot-badge" id="badge-<%= lot.id %>"><%= lot.availabilityPercent %>%</div>
+                      <% if (lot.operatingStatus === 'MAINTENANCE') { %>
+                        <div class="lot-badge maintenance" id="badge-<%= lot.id %>" data-maintenance="1">🚧 Bảo trì</div>
+                      <% } else { %>
+                        <div class="lot-badge" id="badge-<%= lot.id %>"><%= lot.availabilityPercent %>%</div>
+                      <% } %>
                     </div>
 
                     <div class="lot-info">
@@ -103,8 +107,13 @@
                     </div>
 
                     <div class="lot-footer">
-                      <span class="lot-status <%= lot.status === 'Hết chỗ' ? 'full' : '' %>"><%= lot.status %></span>
-                      <span class="lot-cta">Đặt chỗ →</span>
+                      <% if (lot.operatingStatus === 'MAINTENANCE') { %>
+                        <span class="lot-status maintenance">Tạm ngưng bảo trì</span>
+                        <span class="lot-cta">Xem chi tiết</span>
+                      <% } else { %>
+                        <span class="lot-status <%= lot.status === 'Hết chỗ' ? 'full' : '' %>"><%= lot.status %></span>
+                        <span class="lot-cta">Đặt chỗ →</span>
+                      <% } %>
                     </div>
                   </a>
                 <% }); %>
@@ -201,8 +210,9 @@
             sliderWrapper.style.transform = `translateX(-${currentIndex * 100}%)`;
         }, 5000);
 
-        // Set badge colors dynamically based on availability
-        document.querySelectorAll('[id^="badge-"]').forEach(badge => {
+        // Set badge colors dynamically based on availability (maintenance
+        // badges keep their own CSS color and are skipped here)
+        document.querySelectorAll('[id^="badge-"]:not([data-maintenance])').forEach(badge => {
             const percentText = badge.textContent.trim();
             const percent = parseInt(percentText);
             if (percent <= 50) {
@@ -249,12 +259,15 @@
                     const price = lot.pricePerHour !== undefined ? lot.pricePerHour : (lot.price !== undefined ? lot.price : 15000);
                     const percent = Math.round((available / total) * 100);
                     const status = available === 0 ? 'Hết chỗ' : (available <= 5 ? 'Sắp hết' : 'Còn chỗ');
+                    const isMaintenance = lot.operatingStatus === 'MAINTENANCE';
 
                     a.innerHTML = `
                         <img src="${lot.image}" class="lot-image" alt="${escapeHtml(lot.name)}" referrerPolicy="no-referrer">
                         <div class="lot-header">
                           <h3>${escapeHtml(lot.name)}</h3>
-                          <div class="lot-badge" id="badge-${lot.id}">${percent}%</div>
+                          ${isMaintenance
+                            ? `<div class="lot-badge maintenance" id="badge-${lot.id}" data-maintenance="1">🚧 Bảo trì</div>`
+                            : `<div class="lot-badge" id="badge-${lot.id}">${percent}%</div>`}
                         </div>
                         <div class="lot-info">
                           <p class="lot-address">📍 ${escapeHtml(lot.address || lot.adress || '')}</p>
@@ -267,15 +280,16 @@
                           </div>
                         </div>
                         <div class="lot-footer">
-                          <span class="lot-status ${status === 'Hết chỗ' ? 'full' : ''}">${status}</span>
-                          <span class="lot-cta">Đặt chỗ →</span>
+                          ${isMaintenance
+                            ? `<span class="lot-status maintenance">Tạm ngưng bảo trì</span><span class="lot-cta">Xem chi tiết</span>`
+                            : `<span class="lot-status ${status === 'Hết chỗ' ? 'full' : ''}">${status}</span><span class="lot-cta">Đặt chỗ →</span>`}
                         </div>
                     `;
 
                     grid.appendChild(a);
                 });
 
-                document.querySelectorAll('[id^="badge-"]').forEach(badge => {
+                document.querySelectorAll('[id^="badge-"]:not([data-maintenance])').forEach(badge => {
                     const percent = parseInt(badge.textContent.trim());
                     badge.style.background = percent <= 50 ? '#f59e0b' : 'var(--primary-green)';
                 });

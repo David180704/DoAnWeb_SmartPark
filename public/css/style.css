@@ -286,6 +286,14 @@ header {
   color: #ef4444;
 }
 
+.lot-status.maintenance {
+  color: #b45309;
+}
+
+.lot-badge.maintenance {
+  background: #f59e0b !important;
+}
+
 .lot-cta {
   font-weight: 700;
   color: var(--primary-green);

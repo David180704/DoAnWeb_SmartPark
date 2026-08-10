@@ -40,6 +40,11 @@ function toPublicLot(doc, availableSlots, totalSlots) {
         availableSlots,
         availabilityPercent,
         status,
+        // ACTIVE | MAINTENANCE — the admin-controlled operating status (see
+        // updateLotAdmin), distinct from `status` above which just describes
+        // slot availability. Surfaced to customers so a closed-for-maintenance
+        // lot shows as such instead of only failing silently at booking time.
+        operatingStatus: doc.status || 'ACTIVE',
         pricePerHour: doc.pricePerHour,
         image: doc.image,
         zones: doc.zones,

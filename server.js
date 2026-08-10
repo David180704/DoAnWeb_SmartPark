@@ -520,7 +520,8 @@ app.get('/parking/:lotId', async (req, res) => {
         reviews: lot.reviews,
         zones: lot.zones,
         image: lot.image,
-        amenities: lot.amenities
+        amenities: lot.amenities,
+        operatingStatus: lot.operatingStatus
     });
 });
 

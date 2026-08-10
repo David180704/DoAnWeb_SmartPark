@@ -18,6 +18,16 @@
   text-decoration: underline;
 }
 
+.maintenance-banner {
+  background: #fff7ed;
+  color: #9a3412;
+  border-bottom: 1px solid #fed7aa;
+  padding: 14px 50px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* PARKING HEADER */
 .parking-header {
   background: linear-gradient(135deg, var(--primary-green) 0%, var(--primary-green-dark) 100%);
@@ -415,6 +425,12 @@
 .btn-book {
   padding: 14px !important;
   font-size: 15px !important;
+}
+
+.btn-book:disabled {
+  background: #d1d5db !important;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
 /* RESPONSIVE */

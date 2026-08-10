@@ -68,6 +68,10 @@
         </div>
     </section>
 
+    <% if (operatingStatus === 'MAINTENANCE') { %>
+    <div class="maintenance-banner">🚧 Bãi xe này đang tạm ngưng hoạt động để bảo trì. Không thể đặt chỗ mới lúc này — vui lòng chọn bãi khác hoặc quay lại sau.</div>
+    <% } %>
+
     <!-- MAIN CONTENT -->
     <div class="parking-container">
         <!-- LEFT SIDE - BOOKING FORM -->
@@ -209,6 +213,7 @@
     <script>
         const pricePerHour = <%= pricePerHour %>;
         const lotId = '<%= lotId %>';
+        const operatingStatus = '<%= operatingStatus %>';
         let selectedSlot = null;
         let currentZone = 'all';
         let allSlots = [];
@@ -297,6 +302,11 @@
         document.getElementById('parking-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            if (operatingStatus === 'MAINTENANCE') {
+                alert('Bãi xe này đang tạm ngưng hoạt động để bảo trì. Không thể đặt chỗ mới lúc này.');
+                return;
+            }
+
             if (!SmartParkAuth.getToken()) {
                 alert('Bạn cần đăng nhập để thực hiện đặt chỗ!');
                 window.location.href = `/login?redirect=${encodeURIComponent(window.location.href)}`;
@@ -346,6 +356,12 @@
         // Initialize
         updateHours();
         loadSlots();
+
+        if (operatingStatus === 'MAINTENANCE') {
+            const bookBtn = document.querySelector('.btn-book');
+            bookBtn.disabled = true;
+            bookBtn.textContent = '🚧 Tạm ngưng nhận đặt chỗ';
+        }
 
         // Autofill plate if user is logged in
         const currentUser = SmartParkAuth.getUser();
