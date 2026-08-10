@@ -14,12 +14,15 @@ function buildMemoContent(ticketCode) {
     return `PARK${String(ticketCode).slice(-6).toUpperCase()}`;
 }
 
-// Banks often prepend/append extra text to the transfer content the
-// customer's app sends (branch codes, "chuyen tien", accents stripped,
-// etc), so search for the PARK<6 chars> tag anywhere in the string
-// rather than requiring an exact match.
+// Banks/e-wallets often prepend/append extra text to the transfer content
+// (branch codes, "chuyen tien", accents stripped, etc), and some routes
+// (seen via MoMo -> bank) even insert a stray space in the middle of the
+// memo itself (e.g. "PARKVFUYJ Y" instead of "PARKVFUYJY"). Strip all
+// whitespace first, then search for the PARK<6 chars> tag anywhere in
+// the remaining string rather than requiring an exact/contiguous match.
 function extractMemoSuffix(content) {
-    const match = /PARK([A-Z0-9]{6})/i.exec(String(content || '').toUpperCase());
+    const normalized = String(content || '').toUpperCase().replace(/\s+/g, '');
+    const match = /PARK([A-Z0-9]{6})/i.exec(normalized);
     return match ? match[1] : null;
 }
 
