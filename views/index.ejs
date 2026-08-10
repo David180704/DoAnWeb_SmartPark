@@ -28,13 +28,15 @@
         </div>
     </header>
 
-    <!-- SLIDESHOW 5 ẢNH -->
+    <!-- SLIDESHOW: dùng ảnh từ Unsplash (CDN ngoài) thay vì file local, vì
+         các file avif/jpg local trong repo từng bị Git làm hỏng dữ liệu
+         nhị phân (đã có .gitattributes chặn từ nay, nhưng chưa có bản gốc
+         sạch để khôi phục) — nguồn ngoài ổn định hơn cho các ảnh này. -->
     <section class="slider-container">
         <div class="slider-wrapper" id="slider">
-            
-            <img class="slide" src="/images/slide1.avif" alt="Slide 1">
-    <img class="slide" src="/images/slide2.avif" alt="Slide 2">
-    <img class="slide" src="/images/slide3.avif" alt="Slide 3">
+            <img class="slide" src="https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&q=80&w=1600" alt="Slide 1" referrerpolicy="no-referrer">
+            <img class="slide" src="https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?auto=format&fit=crop&q=80&w=1600" alt="Slide 2" referrerpolicy="no-referrer">
+            <img class="slide" src="https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&q=80&w=1600" alt="Slide 3" referrerpolicy="no-referrer">
         </div>
     </section>
 

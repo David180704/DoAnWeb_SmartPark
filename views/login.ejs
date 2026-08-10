@@ -226,6 +226,21 @@
 
     <!-- JAVASCRIPT -->
     <script>
+        // If already logged in (e.g. the browser's Back button landed here
+        // after a previous login redirect), skip the form entirely instead
+        // of showing it as if signed out.
+        function redirectIfAlreadyLoggedIn() {
+            if (localStorage.getItem('smartpark_token')) {
+                const params = new URLSearchParams(window.location.search);
+                window.location.replace(params.get('redirect') || '/');
+            }
+        }
+        redirectIfAlreadyLoggedIn();
+        // Back/forward navigation can restore this page from the browser's
+        // bfcache without re-running scripts from scratch — "pageshow"
+        // fires in that case too, so re-check there.
+        window.addEventListener('pageshow', redirectIfAlreadyLoggedIn);
+
         // Form toggle function
         function toggleForm(formId) {
             const forms = document.querySelectorAll('.auth-form');

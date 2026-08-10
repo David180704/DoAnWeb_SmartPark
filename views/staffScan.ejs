@@ -258,7 +258,24 @@
                 </div>
             `;
             document.getElementById('btnPrintInvoice').addEventListener('click', () => printTicket(t));
-            document.getElementById('btnScanAnother').addEventListener('click', () => { panel.style.display = 'none'; panel.innerHTML = ''; });
+            document.getElementById('btnScanAnother').addEventListener('click', resetToScanScreen);
+        }
+
+        // Clears the result and brings back the camera/manual-entry tabs in
+        // their default state, so "Quét vé khác" reliably returns to a
+        // fresh scan screen instead of just hiding the previous result.
+        function resetToScanScreen() {
+            const panel = document.getElementById('resultPanel');
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+
+            document.querySelectorAll('.staff-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector('.staff-tab[data-mode="camera"]').classList.add('active');
+            document.getElementById('cameraPanel').style.display = 'block';
+            document.getElementById('manualPanel').style.display = 'none';
+
+            const manualInput = document.getElementById('manualCode');
+            if (manualInput) manualInput.value = '';
         }
 
         function printTicket(t) {
