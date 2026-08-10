@@ -35,7 +35,23 @@ function toPublicTicket(ticket, lot, transaction) {
     };
 }
 
+// Fair-use rule: one in-flight booking per customer at a time (not yet
+// checked out). Keeps a single account from holding several spots while
+// demand is high. NOTE: VIP/priority accounts could later be exempted
+// here by checking the user's role/tier before enforcing this.
+async function assertNoActiveTicket(userId) {
+    const existing = await Ticket.findOne({ user_id: userId, status: { $in: ['PENDING', 'ACTIVE'] } });
+    if (existing) {
+        const err = new Error('ALREADY_HAS_ACTIVE_TICKET');
+        err.code = 'ALREADY_HAS_ACTIVE_TICKET';
+        err.ticketCode = existing.ticket_code;
+        throw err;
+    }
+}
+
 async function createTicket(userId, { lotId, spotCode, vehicleType, expectedHours }) {
+    await assertNoActiveTicket(userId);
+
     const lot = await parkingRepository.getLot(lotId);
     if (!lot) {
         const err = new Error('LOT_NOT_FOUND');

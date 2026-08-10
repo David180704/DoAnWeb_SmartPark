@@ -170,6 +170,9 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
         });
         return res.json(stripInternal(ticket));
     } catch (err) {
+        if (err.code === 'ALREADY_HAS_ACTIVE_TICKET') {
+            return res.status(409).json({ message: `Bạn đang có 1 chỗ đặt chưa hoàn tất (mã ${err.ticketCode}). Vui lòng thanh toán/checkout hoặc chờ hết hạn trước khi đặt chỗ mới.` });
+        }
         if (err.code === 'SPOT_UNAVAILABLE') {
             return res.status(409).json({ message: 'Chỗ này vừa được người khác đặt. Vui lòng chọn chỗ khác.' });
         }
