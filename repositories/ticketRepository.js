@@ -7,7 +7,7 @@ const User = require('../models/User');
 const parkingRepository = require('./parkingRepository');
 const userRepository = require('./userRepository');
 const staffRepository = require('./staffRepository');
-const { buildQrUrl, buildCheckInQrUrl } = require('../utils/payment');
+const { buildQrUrl, buildCheckInQrUrl, buildCheckInBarcodeUrl } = require('../utils/payment');
 
 const BOOKING_WINDOW_MS = 5 * 60 * 1000; // hold the spot for 5 minutes to pay before auto-cancelling
 
@@ -37,7 +37,8 @@ function toPublicTicket(ticket, lot, transaction) {
         totalPrice: transaction ? transaction.total_amount : null,
         paymentStatus: transaction ? transaction.payment_status : 'PENDING',
         qrCodeUrl: transaction ? transaction.qr_code_url : null,
-        checkInQrUrl: buildCheckInQrUrl(ticket.ticket_code)
+        checkInQrUrl: buildCheckInQrUrl(ticket.ticket_code),
+        checkInBarcodeUrl: buildCheckInBarcodeUrl(ticket.ticket_code)
     };
 }
 

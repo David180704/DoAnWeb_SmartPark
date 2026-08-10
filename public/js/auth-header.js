@@ -125,7 +125,7 @@
             <div class="row"><span>Phí gửi xe</span><strong>${formatMoney(t.standardFee != null ? t.standardFee : t.totalPrice)}</strong></div>
             ${t.overtimeFee ? `<div class="row"><span>Phí phạt quá giờ (${t.overtimeMinutes} phút)</span><strong>${formatMoney(t.overtimeFee)}</strong></div>` : ''}
             <div class="row"><span>Tổng tiền</span><strong>${formatMoney(t.totalPrice)}</strong></div>
-            ${t.checkInQrUrl ? `<img src="${t.checkInQrUrl}" width="180" height="180" alt="QR mã vé"><div style="font-size:12px;color:#888;">Đưa mã QR này cho nhân viên để check-in / check-out</div>` : ''}
+            ${t.checkInBarcodeUrl ? `<img src="${t.checkInBarcodeUrl}" width="260" height="90" alt="Mã vạch vé"><div style="font-size:12px;color:#888;">Đưa mã vạch này cho nhân viên quét để check-in / check-out</div>` : ''}
             </body></html>
         `);
         w.document.close();

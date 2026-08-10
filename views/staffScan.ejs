@@ -38,18 +38,17 @@
             <h1>Quét Vé Khách Hàng</h1>
 
             <div class="staff-tabs">
-                <button type="button" class="staff-tab active" data-mode="camera">📷 Quét QR</button>
+                <button type="button" class="staff-tab active" data-mode="camera">📷 Quét QR/Mã vạch</button>
                 <button type="button" class="staff-tab" data-mode="manual">⌨️ Nhập mã vé</button>
             </div>
 
             <div class="staff-mode-panel" id="cameraPanel">
                 <video id="scanVideo" playsinline></video>
-                <canvas id="scanCanvas" style="display:none;"></canvas>
                 <div class="staff-scan-actions">
                     <button type="button" id="btnStartCamera" class="btn btn-primary">Bật camera</button>
                     <button type="button" id="btnStopCamera" class="btn btn-secondary" style="display:none;">Tắt camera</button>
                 </div>
-                <p class="staff-hint">Đưa mã QR chứa mã vé (dạng TKxxxxxxxxxx) vào khung hình camera.</p>
+                <p class="staff-hint">Đưa mã QR hoặc mã vạch chứa mã vé (dạng TKxxxxxxxxxx) vào khung hình camera.</p>
             </div>
 
             <div class="staff-mode-panel" id="manualPanel" style="display:none;">
@@ -64,7 +63,7 @@
     </main>
 
     <script src="/js/auth-header.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
     <script>
         const STAFF_ROLES = ['STAFF', 'ADMIN'];
         const user = SmartParkAuth.getUser();
@@ -93,53 +92,55 @@
                 });
             });
 
-            // ---- Camera QR scanning (jsQR) ----
-            const video = document.getElementById('scanVideo');
-            const canvas = document.getElementById('scanCanvas');
-            const ctx = canvas.getContext('2d');
-            let stream = null;
+            // ---- Camera scanning: QR code + barcode, both via ZXing ----
+            // BrowserMultiFormatReader decodes QR and common 1D barcode
+            // formats (Code128, EAN, etc.) from the same video feed, so
+            // whichever the customer's printed invoice/ticket carries just
+            // works — no separate code path needed per format.
+            const codeReader = new ZXing.BrowserMultiFormatReader();
             let scanning = false;
 
             async function startCamera() {
+                scanning = true;
+                document.getElementById('btnStartCamera').style.display = 'none';
+                document.getElementById('btnStopCamera').style.display = 'inline-block';
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                    video.srcObject = stream;
-                    video.setAttribute('playsinline', true);
-                    await video.play();
-                    document.getElementById('btnStartCamera').style.display = 'none';
-                    document.getElementById('btnStopCamera').style.display = 'inline-block';
-                    scanning = true;
-                    requestAnimationFrame(tick);
+                    // No device id -> ZXing requests { facingMode: 'environment' } itself.
+                    await codeReader.decodeFromVideoDevice(undefined, 'scanVideo', (result, err) => {
+                        if (!scanning || !result) return; // err fires every frame with nothing decodable yet — expected
+                        stopCamera();
+                        handleScannedText(result.getText());
+                    });
                 } catch (err) {
+                    scanning = false;
+                    document.getElementById('btnStartCamera').style.display = 'inline-block';
+                    document.getElementById('btnStopCamera').style.display = 'none';
                     alert('Không thể mở camera: ' + err.message + '. Bạn có thể dùng tab "Nhập mã vé" thay thế.');
                 }
             }
 
             function stopCamera() {
                 scanning = false;
-                if (stream) {
-                    stream.getTracks().forEach(t => t.stop());
-                    stream = null;
-                }
+                codeReader.reset();
                 document.getElementById('btnStartCamera').style.display = 'inline-block';
                 document.getElementById('btnStopCamera').style.display = 'none';
             }
 
-            function tick() {
-                if (!scanning) return;
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
-                    if (code && code.data) {
-                        stopCamera();
-                        lookupTicket(code.data.trim());
-                        return;
-                    }
+            // Ticket codes always look like "TK" + alphanumerics (see
+            // ticketRepository#generateTicketCode) — a scan that doesn't match
+            // (a stray product barcode, an unrelated QR, ...) is rejected
+            // immediately as a wrong code instead of wasting a lookup call.
+            const TICKET_CODE_PATTERN = /^TK[A-Z0-9]{4,20}$/;
+
+            function handleScannedText(text) {
+                const code = String(text || '').trim().toUpperCase();
+                if (!TICKET_CODE_PATTERN.test(code)) {
+                    const panel = document.getElementById('resultPanel');
+                    panel.style.display = 'block';
+                    panel.innerHTML = `<p class="staff-error">Mã sai: "${esc(text)}" không phải mã vé hợp lệ. Vui lòng quét lại hoặc nhập tay.</p>`;
+                    return;
                 }
-                requestAnimationFrame(tick);
+                lookupTicket(code);
             }
 
             document.getElementById('btnStartCamera').addEventListener('click', startCamera);

@@ -22,6 +22,13 @@ function buildCheckInQrUrl(ticketCode) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(ticketCode)}`;
 }
 
+// Same ticket code, rendered as a Code128 barcode instead of a QR square —
+// printed on the customer's paid invoice (see auth-header.js#printInvoice).
+// The staff scan camera reads both formats (ZXing), so either printout works.
+function buildCheckInBarcodeUrl(ticketCode) {
+    return `https://barcodeapi.org/api/128/${encodeURIComponent(ticketCode)}`;
+}
+
 // Banks/e-wallets often prepend/append extra text to the transfer content
 // (branch codes, "chuyen tien", accents stripped, etc), and some routes
 // (seen via MoMo -> bank) even insert a stray space in the middle of the
@@ -34,4 +41,4 @@ function extractMemoSuffix(content) {
     return match ? match[1] : null;
 }
 
-module.exports = { BANK_INFO, buildQrUrl, buildMemoContent, buildCheckInQrUrl, extractMemoSuffix };
+module.exports = { BANK_INFO, buildQrUrl, buildMemoContent, buildCheckInQrUrl, buildCheckInBarcodeUrl, extractMemoSuffix };
