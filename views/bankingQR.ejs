@@ -98,6 +98,16 @@
     </div>
   </main>
 
+  <!-- FAILURE MODAL (hidden by default) -->
+  <div id="failureModal" class="fixed inset-0 hidden z-50 items-center justify-center p-4 bg-slate-900/75 backdrop-blur-md">
+    <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100" style="text-align:center; padding:32px 24px;">
+      <div style="width:56px;height:56px;border-radius:999px;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;">❌</div>
+      <h3 style="margin:0 0 8px; font-size:18px; font-weight:800; color:#991b1b;">Thanh toán thất bại</h3>
+      <p style="margin:0 0 20px; font-size:13px; color:#6b7280; line-height:1.6;">Đã hết thời gian giữ chỗ (5 phút) mà chưa nhận được thanh toán. Đơn đặt chỗ đã bị hủy, chỗ đỗ đã được trả lại.</p>
+      <button id="btnGoHomeFailed" class="btn btn-primary" style="width:100%;">Về trang chủ</button>
+    </div>
+  </div>
+
   <!-- E-TICKET MODAL (hidden by default) -->
   <div id="ticketModal" class="fixed inset-0 hidden z-50 items-center justify-center p-4 bg-slate-900/75 backdrop-blur-md">
     <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
@@ -112,8 +122,8 @@
         </div>
       </div>
 
-      <div id="autoRedirectNote" style="background:#ecfdf5; color:#065f46; font-size:13px; font-weight:600; padding:10px 18px; text-align:center;">
-        ✅ Thanh toán thành công! Đang chuyển về trang chủ sau <span id="redirectCountdown">5</span>s...
+      <div style="background:#ecfdf5; color:#065f46; font-size:13px; font-weight:600; padding:10px 18px; text-align:center;">
+        ✅ Thanh toán thành công!
       </div>
 
       <div style="padding:18px;">
@@ -141,17 +151,11 @@
           </div>
 
           <div style="background:#f8faf8;padding:10px;border-radius:10px;border:1px solid #eef7f2;text-align:center;">
-            <div style="display:flex; height:40px; gap:0.5rem; align-items:center; justify-content:center; margin-bottom:6px;">
-              <!-- barcode lines -->
-              <div style="background:#111; width:3px; height:26px;"></div>
-              <div style="background:#111; width:2px; height:26px;"></div>
-              <div style="background:#111; width:4px; height:26px;"></div>
-              <div style="background:#111; width:2px; height:26px;"></div>
-              <div style="background:#111; width:3px; height:26px;"></div>
-            </div>
-            <div id="ticketCode" style="font-family:monospace; font-size:12px; color:#6b7280; letter-spacing:4px;"></div>
+            <img id="ticketQr" src="" alt="QR check-in" style="width:70px; height:70px; display:block; margin:0 auto 6px;">
+            <div id="ticketCode" style="font-family:monospace; font-size:11px; color:#6b7280; letter-spacing:2px;"></div>
           </div>
         </div>
+        <p style="font-size:11px; color:#9ca3a1; margin-top:12px; text-align:center;">Đưa mã QR này cho nhân viên bãi xe để check-in / check-out.</p>
       </div>
 
       <div style="background:#fbfffc; padding:12px; border-top:1px solid #f1f6f2; display:flex; justify-content:flex-end; gap:10px;">
@@ -168,11 +172,22 @@
       spot: ticket.spot,
       vehiclePlate: ticket.vehiclePlate,
       bookingExpiredAt: ticket.bookingExpiredAt,
+      checkInQrUrl: ticket.checkInQrUrl,
       formattedPrice: formattedPrice
   }).replace(/</g,'\\u003c') %></script>
   <script src="/js/auth-header.js"></script>
   <script>
     const ticketData = JSON.parse(document.getElementById('ticket-data').textContent);
+
+    let paymentSucceeded = false;
+
+    function showFailureNotice() {
+      if (paymentSucceeded) return; // success already won the race, ignore
+      console.log('[SmartPark] Thanh toán thất bại / hết hạn giữ chỗ cho vé', ticketData.code);
+      clearInterval(pollTimer);
+      document.getElementById('failureModal').classList.remove('hidden');
+      document.getElementById('failureModal').classList.add('flex');
+    }
 
     // Countdown timer, based on the real booking_expired_at from the server
     (function(){
@@ -186,11 +201,16 @@
         if(remaining<=0){
           clearInterval(timer);
           if(el) el.textContent = 'Đã hết hạn';
+          showFailureNotice();
         }
       }
       update();
       const timer = setInterval(update,1000);
     })();
+
+    document.getElementById('btnGoHomeFailed')?.addEventListener('click', () => {
+      window.location.href = '/';
+    });
 
     // Copy memo
     document.getElementById('copyMemo')?.addEventListener('click', async ()=>{
@@ -208,28 +228,19 @@
     });
 
     function showSuccessTicket() {
+      paymentSucceeded = true;
+      console.log('[SmartPark] Thanh toán thành công cho vé', ticketData.code);
+
       document.getElementById('ticketLocation').textContent = ticketData.lotName;
       document.getElementById('ticketAddress').textContent = ticketData.lotAddress || '';
       document.getElementById('ticketPlate').textContent = ticketData.vehiclePlate || '';
       document.getElementById('ticketSlots').textContent = ticketData.spot;
       document.getElementById('ticketPrice').textContent = ticketData.formattedPrice;
       document.getElementById('ticketCode').textContent = ticketData.code;
+      if (ticketData.checkInQrUrl) document.getElementById('ticketQr').src = ticketData.checkInQrUrl;
       document.getElementById('ticketModal').classList.remove('hidden');
       document.getElementById('ticketModal').classList.add('flex');
       clearInterval(pollTimer);
-
-      // Log + auto-redirect to the homepage a few seconds after success
-      console.log('[SmartPark] Thanh toán thành công cho vé', ticketData.code, '- tự động chuyển về trang chủ.');
-      let secondsLeft = 5;
-      const countdownEl = document.getElementById('redirectCountdown');
-      const redirectTimer = setInterval(() => {
-        secondsLeft--;
-        if (countdownEl) countdownEl.textContent = secondsLeft;
-        if (secondsLeft <= 0) {
-          clearInterval(redirectTimer);
-          window.location.href = '/';
-        }
-      }, 1000);
     }
 
     // Confirm payment against the real ticket, then show the e-ticket.

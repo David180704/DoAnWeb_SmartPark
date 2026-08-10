@@ -6,7 +6,7 @@ const Vehicle = require('../models/Vehicle');
 const User = require('../models/User');
 const parkingRepository = require('./parkingRepository');
 const userRepository = require('./userRepository');
-const { buildQrUrl } = require('../utils/payment');
+const { buildQrUrl, buildCheckInQrUrl } = require('../utils/payment');
 
 const BOOKING_WINDOW_MS = 5 * 60 * 1000; // hold the spot for 5 minutes to pay before auto-cancelling
 
@@ -27,11 +27,16 @@ function toPublicTicket(ticket, lot, transaction) {
         bookingTime: ticket.booking_time,
         bookingExpiredAt: ticket.booking_expired_at,
         checkInTime: ticket.check_in_time,
+        checkOutTime: ticket.check_out_time,
         expectedHours: ticket.expected_hours,
+        overtimeMinutes: ticket.overtime_minutes || 0,
         status: ticket.status,
+        standardFee: transaction ? transaction.standard_fee : null,
+        overtimeFee: transaction ? transaction.overtime_fee : 0,
         totalPrice: transaction ? transaction.total_amount : null,
         paymentStatus: transaction ? transaction.payment_status : 'PENDING',
-        qrCodeUrl: transaction ? transaction.qr_code_url : null
+        qrCodeUrl: transaction ? transaction.qr_code_url : null,
+        checkInQrUrl: buildCheckInQrUrl(ticket.ticket_code)
     };
 }
 
@@ -255,21 +260,35 @@ async function checkOut(ticketCode) {
     }
 
     const ticket = found._ticketDoc;
+    const lot = await ParkingLotModel.findById(ticket.lot_id);
+    const spot = await ParkingSpot.findById(ticket.spot_id);
+
     const checkOutTime = new Date();
     const checkInTime = ticket.check_in_time || ticket.booking_time;
     const actualMinutes = Math.round((checkOutTime - checkInTime) / 60000);
     const overtimeMinutes = Math.max(0, actualMinutes - ticket.expected_hours * 60);
+    // Penalty rate: same per-hour price as the lot, prorated by the minute.
+    const overtimeFee = overtimeMinutes > 0 ? Math.round((overtimeMinutes / 60) * lot.pricePerHour) : 0;
 
     ticket.check_out_time = checkOutTime;
     ticket.overtime_minutes = overtimeMinutes;
     ticket.status = 'COMPLETED';
     await ticket.save();
 
-    const lot = await ParkingLotModel.findById(ticket.lot_id);
-    const spot = await ParkingSpot.findById(ticket.spot_id);
+    const transaction = found._transactionDoc;
+    if (overtimeFee > 0) {
+        transaction.overtime_fee = overtimeFee;
+        transaction.total_amount += overtimeFee;
+        await transaction.save();
+    }
+
     await parkingRepository.releaseSpot(lot.lot_code, spot.spot_code);
 
-    return { ...found, status: 'COMPLETED', checkOutTime, overtimeMinutes };
+    return toPublicTicket(
+        { ...ticket.toObject(), spotCode: spot.spot_code, vehiclePlate: found.vehiclePlate },
+        { id: lot.lot_code, name: lot.name, address: lot.address },
+        transaction
+    );
 }
 
 // Auto-cancels any PENDING ticket whose 5-minute payment window has

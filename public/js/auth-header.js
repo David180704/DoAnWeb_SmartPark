@@ -107,20 +107,25 @@
     }
 
     function printInvoice(t) {
-        const w = window.open('', '_blank', 'width=420,height=600');
+        const w = window.open('', '_blank', 'width=420,height=680');
         w.document.write(`
-            <html><head><title>Hóa đơn ${escapeHtml(t.code)}</title>
-            <style>body{font-family:sans-serif;padding:24px;color:#111} h2{color:#10b981} .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee}</style>
+            <html><head><title>Vé xe ${escapeHtml(t.code)}</title>
+            <style>body{font-family:sans-serif;padding:24px;color:#111;text-align:center} h2{color:#10b981;margin-bottom:16px} .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;text-align:left} img{margin:16px 0}</style>
             </head><body>
-            <h2>SmartPark - Hóa đơn thanh toán</h2>
+            <h2>SmartPark - Vé Đỗ Xe</h2>
             <div class="row"><span>Mã vé</span><strong>${escapeHtml(t.code)}</strong></div>
             <div class="row"><span>Bãi xe</span><strong>${escapeHtml(t.lotName)}</strong></div>
             <div class="row"><span>Địa chỉ</span><strong>${escapeHtml(t.lotAddress || '')}</strong></div>
             <div class="row"><span>Vị trí</span><strong>${escapeHtml(t.spot)} (${escapeHtml(t.zone)})</strong></div>
             <div class="row"><span>Biển số</span><strong>${escapeHtml(t.vehiclePlate || '')}</strong></div>
-            <div class="row"><span>Số giờ</span><strong>${t.expectedHours} giờ</strong></div>
+            <div class="row"><span>Số giờ dự kiến</span><strong>${t.expectedHours} giờ</strong></div>
             <div class="row"><span>Thời gian đặt</span><strong>${formatDateTime(t.bookingTime)}</strong></div>
+            ${t.checkInTime ? `<div class="row"><span>Giờ vào bãi</span><strong>${formatDateTime(t.checkInTime)}</strong></div>` : ''}
+            ${t.checkOutTime ? `<div class="row"><span>Giờ ra bãi</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>` : ''}
+            <div class="row"><span>Phí gửi xe</span><strong>${formatMoney(t.standardFee != null ? t.standardFee : t.totalPrice)}</strong></div>
+            ${t.overtimeFee ? `<div class="row"><span>Phí phạt quá giờ (${t.overtimeMinutes} phút)</span><strong>${formatMoney(t.overtimeFee)}</strong></div>` : ''}
             <div class="row"><span>Tổng tiền</span><strong>${formatMoney(t.totalPrice)}</strong></div>
+            ${t.checkInQrUrl ? `<img src="${t.checkInQrUrl}" width="180" height="180" alt="QR mã vé"><div style="font-size:12px;color:#888;">Đưa mã QR này cho nhân viên để check-in / check-out</div>` : ''}
             </body></html>
         `);
         w.document.close();

@@ -1,0 +1,15 @@
+# Force binary handling for these extensions so Git never applies
+# line-ending (CRLF/LF) conversion to them — that conversion is what
+# corrupted several images in this repo previously (bytes replaced with
+# UTF-8 U+FFFD, inflating file size and breaking the image format).
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.avif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

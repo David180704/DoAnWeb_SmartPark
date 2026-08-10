@@ -222,17 +222,51 @@
                     alert(data.message || 'Thao tác thất bại.');
                     return;
                 }
-                renderTicket(data);
+                if (action === 'check-out') {
+                    renderCheckoutInvoice(data);
+                } else {
+                    renderTicket(data);
+                }
             } catch (err) {
                 alert('Lỗi kết nối. Vui lòng thử lại.');
             }
         }
 
+        // Itemized invoice shown right after check-out, including the
+        // overtime penalty fee (if the car stayed past expected_hours).
+        function renderCheckoutInvoice(t) {
+            const panel = document.getElementById('resultPanel');
+            const standardFee = t.standardFee != null ? t.standardFee : (t.totalPrice - (t.overtimeFee || 0));
+            panel.innerHTML = `
+                <div class="staff-ticket-card">
+                    <div class="staff-ticket-header">
+                        <strong>Hóa đơn check-out — ${esc(t.code)}</strong>
+                        <span class="sp-ticket-badge sp-status-completed">Hoàn tất</span>
+                    </div>
+                    <div class="staff-row"><span>Khách hàng</span><strong>${esc(t.customerName)}</strong></div>
+                    <div class="staff-row"><span>Biển số</span><strong>${esc(t.vehiclePlate)}</strong></div>
+                    <div class="staff-row"><span>Vị trí</span><strong>${esc(t.spot)} (${esc(t.zone)})</strong></div>
+                    <div class="staff-row"><span>Giờ vào bãi</span><strong>${formatDateTime(t.checkInTime)}</strong></div>
+                    <div class="staff-row"><span>Giờ ra bãi</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>
+                    <div class="staff-row"><span>Phí gửi xe</span><strong>${formatMoney(standardFee)}</strong></div>
+                    ${t.overtimeFee ? `<div class="staff-row" style="color:#e11d48;"><span>Phí phạt quá giờ (${t.overtimeMinutes} phút)</span><strong>${formatMoney(t.overtimeFee)}</strong></div>` : ''}
+                    <div class="staff-row" style="font-weight:800;"><span>Tổng cộng</span><strong>${formatMoney(t.totalPrice)}</strong></div>
+                    <div class="staff-actions">
+                        <button type="button" class="btn btn-secondary" id="btnPrintInvoice">In hóa đơn</button>
+                        <button type="button" class="btn btn-primary" id="btnScanAnother">Quét vé khác</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('btnPrintInvoice').addEventListener('click', () => printTicket(t));
+            document.getElementById('btnScanAnother').addEventListener('click', () => { panel.style.display = 'none'; panel.innerHTML = ''; });
+        }
+
         function printTicket(t) {
-            const w = window.open('', '_blank', 'width=420,height=600');
+            const standardFee = t.standardFee != null ? t.standardFee : (t.totalPrice - (t.overtimeFee || 0));
+            const w = window.open('', '_blank', 'width=420,height=680');
             w.document.write(`
                 <html><head><title>Vé ${esc(t.code)}</title>
-                <style>body{font-family:sans-serif;padding:24px;color:#111} h2{color:#10b981} .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee}</style>
+                <style>body{font-family:sans-serif;padding:24px;color:#111;text-align:center} h2{color:#10b981;margin-bottom:16px} .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;text-align:left} img{margin:16px 0}</style>
                 </head><body>
                 <h2>SmartPark - Vé đỗ xe</h2>
                 <div class="row"><span>Mã vé</span><strong>${esc(t.code)}</strong></div>
@@ -240,7 +274,12 @@
                 <div class="row"><span>Biển số</span><strong>${esc(t.vehiclePlate)}</strong></div>
                 <div class="row"><span>Bãi xe</span><strong>${esc(t.lotName)}</strong></div>
                 <div class="row"><span>Vị trí</span><strong>${esc(t.spot)} (${esc(t.zone)})</strong></div>
+                ${t.checkInTime ? `<div class="row"><span>Giờ vào bãi</span><strong>${formatDateTime(t.checkInTime)}</strong></div>` : ''}
+                ${t.checkOutTime ? `<div class="row"><span>Giờ ra bãi</span><strong>${formatDateTime(t.checkOutTime)}</strong></div>` : ''}
+                <div class="row"><span>Phí gửi xe</span><strong>${formatMoney(standardFee)}</strong></div>
+                ${t.overtimeFee ? `<div class="row"><span>Phí phạt quá giờ (${t.overtimeMinutes} phút)</span><strong>${formatMoney(t.overtimeFee)}</strong></div>` : ''}
                 <div class="row"><span>Tổng tiền</span><strong>${formatMoney(t.totalPrice)}</strong></div>
+                ${t.checkInQrUrl ? `<img src="${t.checkInQrUrl}" width="180" height="180" alt="QR mã vé">` : ''}
                 </body></html>
             `);
             w.document.close();

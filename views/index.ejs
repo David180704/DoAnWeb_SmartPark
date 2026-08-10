@@ -35,7 +35,6 @@
             <img class="slide" src="/images/slide1.avif" alt="Slide 1">
     <img class="slide" src="/images/slide2.avif" alt="Slide 2">
     <img class="slide" src="/images/slide3.avif" alt="Slide 3">
-    <img class="slide" src="/images/slide4.jpg" alt="Slide 4">
         </div>
     </section>
 
@@ -118,21 +117,21 @@
         <div class="card-grid">
             <div class="card">
                 <!-- Sửa lại đường dẫn ảnh cho tự nhiên, trình duyệt sẽ tự hiểu -->
-                <img src="/images/khuyenmai.jpg" alt="Khuyến mãi 20%">
+                <img src="/images/parking-default.jpg" alt="Khuyến mãi 20%">
                 <div class="card-content">
                     <h3>Giảm 20% khi đặt trước 24h</h3>
                     <p>Áp dụng cho khách hàng sử dụng dịch vụ đỗ xe qua đêm tại tầng hầm B2.</p>
                 </div>
             </div>
             <div class="card">
-                <img src="/images/hoantien.jpg" alt="Hoàn tiền 50K">
+                <img src="/images/parking-default.jpg" alt="Hoàn tiền 50K">
                 <div class="card-content">
                     <h3>Hoàn tiền 50K khi quét VNPAY</h3>
                     <p>Thanh toán bằng QR Code qua ứng dụng ngân hàng để nhận ưu đãi ngay hôm nay.</p>
                 </div>
             </div>
             <div class="card">
-                <img src="/images/goi1tr2.png" alt="Gói 1.200.000đ">
+                <img src="/images/parking-default.jpg" alt="Gói 1.200.000đ">
                 <div class="card-content">
                     <h3>Gói đỗ xe tháng chỉ 1.200.000đ</h3>
                     <p>Tiết kiệm hơn với gói cước tháng dành cho nhân viên văn phòng trong toà nhà.</p>
@@ -146,14 +145,14 @@
         <h2 class="section-title">TIN TỨC HOẠT ĐỘNG</h2>
         <div class="card-grid">
             <div class="card">
-                <img src="/images/lap_camera.jpg" alt="Lắp camera AI">
+                <img src="/images/lap-camera.jpg" alt="Lắp camera AI">
                 <div class="card-content">
                     <h3>Nâng cấp hệ thống Camera nhận diện biển số AI</h3>
                     <p>SmartPark vừa đưa vào hoạt động hệ thống AI giúp xe ra vào không cần quẹt thẻ vật lý.</p>
                 </div>
             </div>
             <div class="card">
-                <img src="/images/baotri.jpg" alt="Bảo trì hầm B1">
+                <img src="/images/parking-default.jpg" alt="Bảo trì hầm B1">
                 <div class="card-content">
                     <h3>Thông báo bảo trì hầm B1 ngày 20/07</h3>
                     <p>Để đảm bảo chất lượng, bãi đỗ sẽ tạm ngưng nhận xe hầm B1 từ 22h - 05h sáng hôm sau.</p>
@@ -184,7 +183,7 @@
     <!-- JAVASCRIPT CHO HIỆU ỨNG SLIDER TRƯỢT 5 GIÂY -->
     <script>
         const sliderWrapper = document.getElementById('slider');
-        const totalSlides = 4; // Bạn có 5 ảnh
+        const totalSlides = 3;
         let currentIndex = 0;
 
         // Hàm tự động chạy mỗi 5000ms (5 giây)
@@ -211,161 +210,174 @@
             }
         });
 
-        // === Parking search + Map (Leaflet) using API + fetch ===
-        (function initMap(){
-            const LScript = document.createElement('script');
-            LScript.src = 'https://unpkg.com/leaflet@1.10.0/dist/leaflet.js';
-            LScript.onload = async () => {
-                const map = L.map('map').setView([10.776, 106.664], 14);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(map);
+        // === Parking list + filters + map ===
+        // The card list and the search/amenity filters are set up
+        // independently of the Leaflet map, so they keep working even if
+        // the map's third-party CDN script is slow, blocked, or fails —
+        // only the map itself degrades gracefully in that case.
+        (function () {
+            const grid = document.getElementById('parking-grid');
+            const nameMap = {
+                ev_charging: '🔌 Sạc EV',
+                cctv: '🛡️ Camera CCTV',
+                covered: '☂️ Có mái che',
+                monthly: '📅 Gói tháng',
+                valet: '🤵 Valet Parking'
+            };
 
-                const markers = {};
-                const grid = document.getElementById('parking-grid');
+            let map = null;
+            const markers = {};
+            let allLotsData = [];
 
-                const nameMap = { 
-                    ev_charging: '🔌 Sạc EV', 
-                    cctv: '🛡️ Camera CCTV', 
-                    covered: '☂️ Có mái che', 
-                    monthly: '📅 Gói tháng', 
-                    valet: '🤵 Valet Parking' 
-                };
+            function escapeHtml(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\'/g, '&#39;'); }
+            function debounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
 
-                // Fetch parking data from API
+            function renderCards(data) {
+                grid.innerHTML = '';
+                data.forEach(lot => {
+                    const a = document.createElement('a');
+                    a.href = '/parking/' + lot.id;
+                    a.className = 'parking-lot-card';
+                    a.setAttribute('data-amenities', (lot.amenities || []).join(','));
+                    a.setAttribute('data-lat', lot.coords ? lot.coords.lat : lot.lat);
+                    a.setAttribute('data-lng', lot.coords ? lot.coords.lng : lot.lng);
+
+                    const available = lot.availableSlots !== undefined ? lot.availableSlots : (lot.available !== undefined ? lot.available : 0);
+                    const total = lot.totalSlots !== undefined ? lot.totalSlots : (lot.total !== undefined ? lot.total : 100);
+                    const price = lot.pricePerHour !== undefined ? lot.pricePerHour : (lot.price !== undefined ? lot.price : 15000);
+                    const percent = Math.round((available / total) * 100);
+                    const status = available === 0 ? 'Hết chỗ' : (available <= 5 ? 'Sắp hết' : 'Còn chỗ');
+
+                    a.innerHTML = `
+                        <img src="${lot.image}" class="lot-image" alt="${escapeHtml(lot.name)}" referrerPolicy="no-referrer">
+                        <div class="lot-header">
+                          <h3>${escapeHtml(lot.name)}</h3>
+                          <div class="lot-badge" id="badge-${lot.id}">${percent}%</div>
+                        </div>
+                        <div class="lot-info">
+                          <p class="lot-address">📍 ${escapeHtml(lot.address || lot.adress || '')}</p>
+                          <div class="lot-stats">
+                            <div class="stat"><span class="stat-icon">🅿️</span><span><strong>${available}</strong>/${total} trống</span></div>
+                            <div class="stat"><span class="stat-icon">💰</span><span>₫${Number(price).toLocaleString()}/h</span></div>
+                          </div>
+                          <div class="amenities">
+                            ${(lot.amenities || []).map(a => `<span class="amenity">${escapeHtml(nameMap[a] || a)}</span>`).join('')}
+                          </div>
+                        </div>
+                        <div class="lot-footer">
+                          <span class="lot-status ${status === 'Hết chỗ' ? 'full' : ''}">${status}</span>
+                          <span class="lot-cta">Đặt chỗ →</span>
+                        </div>
+                    `;
+
+                    grid.appendChild(a);
+                });
+
+                document.querySelectorAll('[id^="badge-"]').forEach(badge => {
+                    const percent = parseInt(badge.textContent.trim());
+                    badge.style.background = percent <= 50 ? '#f59e0b' : 'var(--primary-green)';
+                });
+            }
+
+            function addMarkersForData(data) {
+                if (!map) return;
+                data.forEach(lot => {
+                    const lat = lot.coords ? lot.coords.lat : lot.lat;
+                    const lng = lot.coords ? lot.coords.lng : lot.lng;
+                    if (!lat || !lng || markers[lot.id]) return;
+
+                    const available = lot.availableSlots !== undefined ? lot.availableSlots : 0;
+                    const total = lot.totalSlots !== undefined ? lot.totalSlots : 100;
+                    const price = lot.pricePerHour !== undefined ? lot.pricePerHour : 15000;
+
+                    const marker = L.marker([lat, lng]).addTo(map).bindPopup(`
+                        <div style="font-family: sans-serif; font-size: 13px;">
+                            <img src="${lot.image}" style="width:100%; height:90px; object-fit:cover; border-radius:4px; margin-bottom:5px;">
+                            <strong>${escapeHtml(lot.name)}</strong><br/>
+                            📍 ${escapeHtml(lot.address || '')}<br/>
+                            💰 ₫${Number(price).toLocaleString()}/h<br/>
+                            🟢 Trống: <strong>${available}</strong>/${total}
+                        </div>
+                    `);
+                    marker.on('click', () => { window.location.href = '/parking/' + lot.id; });
+                    markers[lot.id] = marker;
+                });
+
+                const markerList = Object.values(markers);
+                if (markerList.length > 0) {
+                    map.fitBounds(L.featureGroup(markerList).getBounds().pad(0.15));
+                }
+            }
+
+            function applyFilters() {
+                const q = searchInput.value.trim().toLowerCase();
+                const activeAmenities = checkboxes.filter(cb => cb.checked).map(cb => cb.value);
+                const visibleMarkers = [];
+
+                document.querySelectorAll('.parking-lot-card').forEach(card => {
+                    const title = card.querySelector('.lot-header h3').textContent.toLowerCase();
+                    const addr = card.querySelector('.lot-address').textContent.toLowerCase();
+                    const amenities = card.getAttribute('data-amenities') || '';
+
+                    const matchesQuery = !q || title.includes(q) || addr.includes(q);
+                    const matchesAmenities = activeAmenities.every(a => amenities.includes(a));
+
+                    const id = card.getAttribute('href').split('/').pop();
+                    if (matchesQuery && matchesAmenities) {
+                        card.style.display = '';
+                        if (map && markers[id]) {
+                            markers[id].addTo(map);
+                            visibleMarkers.push(markers[id]);
+                        }
+                    } else {
+                        card.style.display = 'none';
+                        if (map && markers[id]) map.removeLayer(markers[id]);
+                    }
+                });
+
+                if (map && visibleMarkers.length > 0) {
+                    map.fitBounds(L.featureGroup(visibleMarkers).getBounds().pad(0.15));
+                }
+            }
+
+            const searchInput = document.getElementById('search-location');
+            const checkboxes = Array.from(document.querySelectorAll('.filters input[type="checkbox"]'));
+
+            async function loadCardsAndFilters() {
                 try {
                     const res = await fetch('/api/parking-lots');
-                    const parkingData = await res.json();
+                    allLotsData = await res.json();
+                    renderCards(allLotsData);
+                    if (map) addMarkersForData(allLotsData);
 
-                    // Render cards
-                    function renderCards(data){
-                        grid.innerHTML = '';
-                        data.forEach(lot => {
-                            const a = document.createElement('a');
-                            a.href = '/parking/' + lot.id;
-                            a.className = 'parking-lot-card';
-                            a.setAttribute('data-amenities', (lot.amenities || []).join(','));
-                            a.setAttribute('data-lat', lot.coords ? lot.coords.lat : lot.lat);
-                            a.setAttribute('data-lng', lot.coords ? lot.coords.lng : lot.lng);
-
-                            const available = lot.availableSlots !== undefined ? lot.availableSlots : (lot.available !== undefined ? lot.available : 0);
-                            const total = lot.totalSlots !== undefined ? lot.totalSlots : (lot.total !== undefined ? lot.total : 100);
-                            const price = lot.pricePerHour !== undefined ? lot.pricePerHour : (lot.price !== undefined ? lot.price : 15000);
-                            const percent = Math.round((available / total) * 100);
-                            const status = available === 0 ? 'Hết chỗ' : (available <= 5 ? 'Sắp hết' : 'Còn chỗ');
-
-                            a.innerHTML = `
-                                <img src="${lot.image}" class="lot-image" alt="${escapeHtml(lot.name)}" referrerPolicy="no-referrer">
-                                <div class="lot-header">
-                                  <h3>${escapeHtml(lot.name)}</h3>
-                                  <div class="lot-badge" id="badge-${lot.id}">${percent}%</div>
-                                </div>
-                                <div class="lot-info">
-                                  <p class="lot-address">📍 ${escapeHtml(lot.address || lot.adress || '')}</p>
-                                  <div class="lot-stats">
-                                    <div class="stat"><span class="stat-icon">🅿️</span><span><strong>${available}</strong>/${total} trống</span></div>
-                                    <div class="stat"><span class="stat-icon">💰</span><span>₫${Number(price).toLocaleString()}/h</span></div>
-                                  </div>
-                                  <div class="amenities">
-                                    ${(lot.amenities||[]).map(a => `<span class="amenity">${escapeHtml(nameMap[a] || a)}</span>`).join('')}
-                                  </div>
-                                </div>
-                                <div class="lot-footer">
-                                  <span class="lot-status ${status === 'Hết chỗ' ? 'full' : ''}">${status}</span>
-                                  <span class="lot-cta">Đặt chỗ →</span>
-                                </div>
-                            `;
-
-                            grid.appendChild(a);
-
-                            // Marker
-                            const lat = lot.coords ? lot.coords.lat : lot.lat;
-                            const lng = lot.coords ? lot.coords.lng : lot.lng;
-                            if (lat && lng) {
-                                const marker = L.marker([lat, lng]).addTo(map).bindPopup(`
-                                    <div style="font-family: sans-serif; font-size: 13px;">
-                                        <img src="${lot.image}" style="width:100%; height:90px; object-fit:cover; border-radius:4px; margin-bottom:5px;">
-                                        <strong>${escapeHtml(lot.name)}</strong><br/>
-                                        📍 ${escapeHtml(lot.address || '')}<br/>
-                                        💰 ₫${Number(price).toLocaleString()}/h<br/>
-                                        🟢 Trống: <strong>${available}</strong>/${total}
-                                    </div>
-                                `);
-                                marker.on('click', () => { window.location.href = '/parking/' + lot.id; });
-                                markers[lot.id] = marker;
-                            }
-                        });
-
-                        // Set badge colors
-                        document.querySelectorAll('[id^="badge-"]').forEach(badge => {
-                            const percentText = badge.textContent.trim();
-                            const percent = parseInt(percentText);
-                            if (percent <= 50) badge.style.background = '#f59e0b'; else badge.style.background = 'var(--primary-green)';
-                        });
-
-                        // Auto adjust bounds of map to show all markers beautifully
-                        const markerList = Object.values(markers);
-                        if (markerList.length > 0) {
-                            const group = L.featureGroup(markerList);
-                            map.fitBounds(group.getBounds().pad(0.15));
-                        }
-                    }
-
-                    // Filtering logic
-                    const searchInput = document.getElementById('search-location');
-                    const checkboxes = Array.from(document.querySelectorAll('.filters input[type="checkbox"]'));
-
-                    function applyFilters(){
-                        const q = searchInput.value.trim().toLowerCase();
-                        const activeAmenities = checkboxes.filter(cb => cb.checked).map(cb => cb.value);
-
-                        const visibleMarkers = [];
-
-                        document.querySelectorAll('.parking-lot-card').forEach(card => {
-                            const title = card.querySelector('.lot-header h3').textContent.toLowerCase();
-                            const addr = card.querySelector('.lot-address').textContent.toLowerCase();
-                            const amenities = card.getAttribute('data-amenities') || '';
-
-                            const matchesQuery = !q || title.includes(q) || addr.includes(q);
-                            const matchesAmenities = activeAmenities.every(a => amenities.includes(a));
-
-                            const id = card.getAttribute('href').split('/').pop();
-                            if (matchesQuery && matchesAmenities) {
-                                card.style.display = '';
-                                if (markers[id]) {
-                                    markers[id].addTo(map);
-                                    visibleMarkers.push(markers[id]);
-                                }
-                            } else {
-                                card.style.display = 'none';
-                                if (markers[id]) map.removeLayer(markers[id]);
-                            }
-                        });
-
-                        // Auto-adjust bounds for filtered results if there are any visible markers
-                        if (visibleMarkers.length > 0) {
-                            const group = L.featureGroup(visibleMarkers);
-                            map.fitBounds(group.getBounds().pad(0.15));
-                        }
-                    }
-
-                    // Debounce helper
-                    function debounce(fn, ms){ let t; return (...args) => { clearTimeout(t); t = setTimeout(()=> fn(...args), ms); }; }
-
-                    // Helpers
-                    function escapeHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g, '&#39;'); }
-
-                    // Initialize render and filters
-                    renderCards(parkingData);
-                    searchInput.addEventListener('input', debounce(applyFilters,250));
+                    searchInput.addEventListener('input', debounce(applyFilters, 250));
                     checkboxes.forEach(cb => cb.addEventListener('change', applyFilters));
-
-                } catch(err){
+                } catch (err) {
                     console.error('Lỗi khi tải danh sách bãi xe', err);
-                    document.getElementById('parking-grid').innerHTML = '<p>Không thể tải danh sách bãi xe lúc này. Vui lòng thử lại sau.</p>';
+                    grid.innerHTML = '<p>Không thể tải danh sách bãi xe lúc này. Vui lòng thử lại sau.</p>';
                 }
-            };
-            document.head.appendChild(LScript);
+            }
+
+            function initMap() {
+                const LScript = document.createElement('script');
+                LScript.src = 'https://unpkg.com/leaflet@1.10.0/dist/leaflet.js';
+                LScript.onload = () => {
+                    map = L.map('map').setView([10.776, 106.664], 14);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap contributors'
+                    }).addTo(map);
+                    if (allLotsData.length > 0) addMarkersForData(allLotsData);
+                };
+                LScript.onerror = () => {
+                    console.warn('Không tải được bản đồ (Leaflet). Danh sách và bộ lọc vẫn hoạt động bình thường.');
+                    const mapEl = document.getElementById('map');
+                    if (mapEl) mapEl.innerHTML = '<p style="padding:20px;text-align:center;color:#888;font-size:13px;">Không thể tải bản đồ.</p>';
+                };
+                document.head.appendChild(LScript);
+            }
+
+            loadCardsAndFilters();
+            initMap();
         })();
 
     </script>

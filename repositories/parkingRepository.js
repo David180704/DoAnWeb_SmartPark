@@ -17,16 +17,20 @@ function normalizeSpotStatus(status) {
     return String(status || 'AVAILABLE').toLowerCase();
 }
 
-async function availableCountForLot(lotObjectId) {
+// zonestatuses.total_spots reflects the real number of seeded parkingspots
+// per zone, which can differ from the parkinglots.totalSlots field (that
+// one drifted out of sync with the actual spot inventory for a few lots)
+// — so total/available are both derived from here, the real source of
+// truth, instead of trusting the lot document's own stored total.
+async function spotCountsForLot(lotObjectId) {
     const rows = await ZoneStatus.aggregate([
         { $match: { lot_id: lotObjectId } },
-        { $group: { _id: null, available: { $sum: '$available_spots' } } }
+        { $group: { _id: null, available: { $sum: '$available_spots' }, total: { $sum: '$total_spots' } } }
     ]);
-    return rows.length ? rows[0].available : 0;
+    return rows.length ? { available: rows[0].available, total: rows[0].total } : { available: 0, total: 0 };
 }
 
-function toPublicLot(doc, availableSlots) {
-    const totalSlots = doc.totalSlots;
+function toPublicLot(doc, availableSlots, totalSlots) {
     const { availabilityPercent, status } = computeSummary(totalSlots, availableSlots);
     return {
         id: doc.lot_code,
@@ -50,8 +54,8 @@ async function listLots() {
     return cache.getOrSet('all', async () => {
         const docs = await ParkingLotModel.find();
         return Promise.all(docs.map(async doc => {
-            const available = await availableCountForLot(doc._id);
-            return toPublicLot(doc, available);
+            const { available, total } = await spotCountsForLot(doc._id);
+            return toPublicLot(doc, available, total);
         }));
     });
 }
@@ -64,8 +68,8 @@ async function getLot(lotCode) {
     return cache.getOrSet(`lot:${lotCode}`, async () => {
         const doc = await findLotDoc(lotCode);
         if (!doc) return null;
-        const available = await availableCountForLot(doc._id);
-        return toPublicLot(doc, available);
+        const { available, total } = await spotCountsForLot(doc._id);
+        return toPublicLot(doc, available, total);
     });
 }
 

@@ -14,6 +14,14 @@ function buildMemoContent(ticketCode) {
     return `PARK${String(ticketCode).slice(-6).toUpperCase()}`;
 }
 
+// A separate QR from the payment one: encodes the raw ticket code as
+// plain text, so the staff scan page's camera (jsQR) can read it directly
+// to look up the ticket for check-in/check-out — scanning the VietQR
+// payment image wouldn't give back the ticket code.
+function buildCheckInQrUrl(ticketCode) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(ticketCode)}`;
+}
+
 // Banks/e-wallets often prepend/append extra text to the transfer content
 // (branch codes, "chuyen tien", accents stripped, etc), and some routes
 // (seen via MoMo -> bank) even insert a stray space in the middle of the
@@ -26,4 +34,4 @@ function extractMemoSuffix(content) {
     return match ? match[1] : null;
 }
 
-module.exports = { BANK_INFO, buildQrUrl, buildMemoContent, extractMemoSuffix };
+module.exports = { BANK_INFO, buildQrUrl, buildMemoContent, buildCheckInQrUrl, extractMemoSuffix };
