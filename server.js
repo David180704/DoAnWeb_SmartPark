@@ -200,6 +200,25 @@ app.get('/api/tickets/me', requireAuth, async (req, res) => {
     }
 });
 
+// Deliberately unauthenticated: the banking-qr page polls this to detect
+// an automatic bank-webhook confirmation. It only leaks whether a ticket
+// (already a secret-ish code) is paid — no customer PII — and not
+// requiring a valid session avoids silently missing the notification if
+// the browser's stored token happened to be missing/expired at that
+// moment.
+app.get('/api/tickets/:code/status', async (req, res) => {
+    try {
+        const ticket = await ticketRepository.findByCode(req.params.code);
+        if (!ticket) {
+            return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
+        }
+        res.json({ status: ticket.status, paymentStatus: ticket.paymentStatus });
+    } catch (err) {
+        console.error('Lỗi khi kiểm tra trạng thái vé:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
 app.get('/api/tickets/:code', requireAuth, async (req, res) => {
     try {
         const ticket = await ticketRepository.findByCode(req.params.code, req.userId);

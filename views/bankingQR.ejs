@@ -173,6 +173,7 @@
       vehiclePlate: ticket.vehiclePlate,
       bookingExpiredAt: ticket.bookingExpiredAt,
       checkInQrUrl: ticket.checkInQrUrl,
+      paymentStatus: ticket.paymentStatus,
       formattedPrice: formattedPrice
   }).replace(/</g,'\\u003c') %></script>
   <script src="/js/auth-header.js"></script>
@@ -279,17 +280,30 @@
 
     // Poll for automatic confirmation from the bank webhook, so the
     // customer doesn't have to click anything once they've actually paid.
-    const pollTimer = setInterval(async () => {
-      if (!SmartParkAuth.getToken()) return;
+    // Uses the unauthenticated /status endpoint (not /api/tickets/:code)
+    // so a missing/expired login token can never silently swallow the
+    // notification — the ticket code itself is the only thing needed.
+    async function checkPaymentStatus() {
       try {
-        const res = await SmartParkAuth.authFetch(`/api/tickets/${encodeURIComponent(ticketData.code)}`);
+        const res = await fetch(`/api/tickets/${encodeURIComponent(ticketData.code)}/status`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.paymentStatus === 'SUCCESS') showSuccessTicket();
       } catch (err) {
         // ignore transient polling errors
       }
-    }, 4000);
+    }
+
+    const pollTimer = setInterval(checkPaymentStatus, 4000);
+
+    // Covers reloading/reopening this page after payment already went
+    // through elsewhere (e.g. paid from a banking app while this tab sat
+    // idle) — check right away instead of waiting for the first interval.
+    if (ticketData.paymentStatus === 'SUCCESS') {
+      showSuccessTicket();
+    } else {
+      checkPaymentStatus();
+    }
 
     // Cancel: just go back to browsing this lot
     document.getElementById('btnSimulateFail')?.addEventListener('click', ()=>{
