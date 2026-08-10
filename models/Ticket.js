@@ -17,8 +17,8 @@ const ticketSchema = new mongoose.Schema({
     expected_hours: { type: Number, required: true },
     check_in_time: { type: Date },
     check_out_time: { type: Date },
-    shift_in_id: { type: mongoose.Schema.Types.ObjectId },
-    shift_out_id: { type: mongoose.Schema.Types.ObjectId },
+    shift_in_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Shift' },
+    shift_out_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Shift' },
     overtime_minutes: { type: Number, default: 0 },
     agreed_relocation_policy: { type: Boolean, default: true },
     status: { type: String, default: 'PENDING' } // PENDING | ACTIVE | COMPLETED | CANCELLED

@@ -6,6 +6,7 @@ const Vehicle = require('../models/Vehicle');
 const User = require('../models/User');
 const parkingRepository = require('./parkingRepository');
 const userRepository = require('./userRepository');
+const staffRepository = require('./staffRepository');
 const { buildQrUrl, buildCheckInQrUrl } = require('../utils/payment');
 
 const BOOKING_WINDOW_MS = 5 * 60 * 1000; // hold the spot for 5 minutes to pay before auto-cancelling
@@ -64,6 +65,16 @@ async function createTicket(userId, { lotId, spotCode, vehicleType, expectedHour
         throw err;
     }
 
+    // Admin can temporarily close a lot for maintenance (see
+    // parkingRepository#updateLotAdmin); a closed lot keeps serving its
+    // existing customers but refuses new bookings.
+    const lotDoc = await parkingRepository.findLotDoc(lotId);
+    if (lotDoc.status && lotDoc.status !== 'ACTIVE') {
+        const err = new Error('LOT_UNAVAILABLE');
+        err.code = 'LOT_UNAVAILABLE';
+        throw err;
+    }
+
     const vehicle = await userRepository.getDefaultVehicle(userId);
     if (!vehicle) {
         const err = new Error('NO_VEHICLE');
@@ -75,7 +86,6 @@ async function createTicket(userId, { lotId, spotCode, vehicleType, expectedHour
     // SPOT_UNAVAILABLE otherwise, so a ticket can't be created for a
     // spot someone else already holds.
     const spot = await parkingRepository.reserveSpot(lotId, spotCode);
-    const lotDoc = await parkingRepository.findLotDoc(lotId);
 
     const ticketCode = generateTicketCode();
     const now = new Date();
@@ -234,7 +244,13 @@ async function findForStaff(ticketCode) {
     };
 }
 
-async function checkIn(ticketCode) {
+// `actingStaff` ({ id, role }) identifies who's performing the scan.
+// STAFF accounts must be on-duty for this exact ticket (assigned to its
+// lot+zone, currently inside their shift) — see staffRepository#assertOnDuty.
+// ADMIN accounts bypass that check entirely (supervisory override), and
+// omitting actingStaff (nothing calls checkIn/checkOut that way today) skips
+// it too, so existing callers don't break.
+async function checkIn(ticketCode, actingStaff) {
     const found = await findByCode(ticketCode);
     if (!found) return null;
     if (found.status !== 'ACTIVE') {
@@ -244,13 +260,20 @@ async function checkIn(ticketCode) {
     }
 
     const ticket = found._ticketDoc;
+
+    let assignment = null;
+    if (actingStaff && actingStaff.role !== 'ADMIN') {
+        assignment = await staffRepository.assertOnDuty(actingStaff.id, ticket);
+    }
+
     ticket.check_in_time = new Date();
+    if (assignment) ticket.shift_in_id = assignment.shift_id._id;
     await ticket.save();
 
     return { ...found, checkInTime: ticket.check_in_time };
 }
 
-async function checkOut(ticketCode) {
+async function checkOut(ticketCode, actingStaff) {
     const found = await findByCode(ticketCode);
     if (!found) return null;
     if (found.status !== 'ACTIVE') {
@@ -263,6 +286,11 @@ async function checkOut(ticketCode) {
     const lot = await ParkingLotModel.findById(ticket.lot_id);
     const spot = await ParkingSpot.findById(ticket.spot_id);
 
+    let assignment = null;
+    if (actingStaff && actingStaff.role !== 'ADMIN') {
+        assignment = await staffRepository.assertOnDuty(actingStaff.id, ticket);
+    }
+
     const checkOutTime = new Date();
     const checkInTime = ticket.check_in_time || ticket.booking_time;
     const actualMinutes = Math.round((checkOutTime - checkInTime) / 60000);
@@ -273,6 +301,7 @@ async function checkOut(ticketCode) {
     ticket.check_out_time = checkOutTime;
     ticket.overtime_minutes = overtimeMinutes;
     ticket.status = 'COMPLETED';
+    if (assignment) ticket.shift_out_id = assignment.shift_id._id;
     await ticket.save();
 
     const transaction = found._transactionDoc;
@@ -322,4 +351,73 @@ async function cancelExpiredTickets() {
     return expired.length;
 }
 
-module.exports = { createTicket, findByCode, findByUser, confirmPayment, confirmPaymentByMemo, findForStaff, checkIn, checkOut, cancelExpiredTickets };
+function startOfToday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+// Recent tickets across all customers, for the admin oversight screen —
+// same shape as findForStaff but batched over the N latest tickets instead
+// of looked up one at a time by code.
+async function listRecentForAdmin(limit = 50) {
+    const tickets = await Ticket.find().sort({ createdAt: -1 }).limit(limit);
+    return Promise.all(tickets.map(async ticket => {
+        const [lot, vehicle, user, transaction, spot] = await Promise.all([
+            ParkingLotModel.findById(ticket.lot_id),
+            Vehicle.findById(ticket.vehicle_id),
+            User.findById(ticket.user_id),
+            Transaction.findOne({ ticket_id: ticket._id }),
+            ParkingSpot.findById(ticket.spot_id)
+        ]);
+        return {
+            code: ticket.ticket_code,
+            lotName: lot ? lot.name : '—',
+            customerName: user ? user.full_name : '—',
+            customerPhone: user ? user.phone : '—',
+            vehiclePlate: vehicle ? vehicle.license_plate : '—',
+            spot: spot ? spot.spot_code : '—',
+            status: ticket.status,
+            paymentStatus: transaction ? transaction.payment_status : 'PENDING',
+            totalPrice: transaction ? transaction.total_amount : null,
+            bookingTime: ticket.booking_time,
+            checkOutTime: ticket.check_out_time
+        };
+    }));
+}
+
+// Aggregate counters for the admin overview screen.
+async function getAdminStats() {
+    const [activeTickets, totalTickets, revenueAgg, todayRevenueAgg] = await Promise.all([
+        Ticket.countDocuments({ status: { $in: ['PENDING', 'ACTIVE'] } }),
+        Ticket.countDocuments(),
+        Transaction.aggregate([
+            { $match: { payment_status: 'SUCCESS' } },
+            { $group: { _id: null, sum: { $sum: '$total_amount' } } }
+        ]),
+        Transaction.aggregate([
+            { $match: { payment_status: 'SUCCESS', paid_at: { $gte: startOfToday() } } },
+            { $group: { _id: null, sum: { $sum: '$total_amount' } } }
+        ])
+    ]);
+    return {
+        activeTickets,
+        totalTickets,
+        totalRevenue: revenueAgg[0] ? revenueAgg[0].sum : 0,
+        todayRevenue: todayRevenueAgg[0] ? todayRevenueAgg[0].sum : 0
+    };
+}
+
+module.exports = {
+    createTicket,
+    findByCode,
+    findByUser,
+    confirmPayment,
+    confirmPaymentByMemo,
+    findForStaff,
+    checkIn,
+    checkOut,
+    cancelExpiredTickets,
+    listRecentForAdmin,
+    getAdminStats
+};

@@ -204,22 +204,35 @@
             : '<div class="sp-empty">Chưa có hóa đơn đã thanh toán.</div>';
     }
 
-    function injectStaffNavLink(user) {
-        const STAFF_ROLES = ['STAFF', 'ADMIN'];
-        if (!user || !STAFF_ROLES.includes(user.role)) return;
+    // Adds one role-specific shortcut link right after "Liên hệ": admin
+    // accounts get the admin dashboard link in that slot (in place of the
+    // ticket-scanning link), plain staff accounts keep the scan-ticket link.
+    function injectRoleNavLink(user) {
+        let href, label;
+        if (!user) return;
+        if (user.role === 'ADMIN') {
+            href = '/admin';
+            label = 'Trang Quản Trị';
+        } else if (user.role === 'STAFF') {
+            href = '/staff/scan';
+            label = 'Quét Vé (NV)';
+        } else {
+            return;
+        }
+
         const navLinks = document.querySelector('.nav-links');
         if (!navLinks || navLinks.querySelector('.sp-staff-link')) return;
 
         const contactLink = Array.from(navLinks.querySelectorAll('a')).find(a => a.textContent.trim() === 'Liên hệ');
-        const staffLink = document.createElement('a');
-        staffLink.href = '/staff/scan';
-        staffLink.className = 'sp-staff-link';
-        staffLink.textContent = 'Quét Vé (NV)';
+        const roleLink = document.createElement('a');
+        roleLink.href = href;
+        roleLink.className = 'sp-staff-link';
+        roleLink.textContent = label;
 
         if (contactLink) {
-            contactLink.insertAdjacentElement('afterend', staffLink);
+            contactLink.insertAdjacentElement('afterend', roleLink);
         } else {
-            navLinks.appendChild(staffLink);
+            navLinks.appendChild(roleLink);
         }
     }
 
@@ -231,7 +244,7 @@
         const authButtons = document.querySelector('.auth-buttons');
         if (!authButtons || !user || !token) return;
 
-        injectStaffNavLink(user);
+        injectRoleNavLink(user);
 
         authButtons.innerHTML = `
             <div class="sp-user-widget">

@@ -92,6 +92,46 @@ function invalidateLot(lotCode) {
     cache.invalidate(`slots:${lotCode}`);
 }
 
+// Admin-facing lot listing: includes the raw operating `status`
+// (ACTIVE/MAINTENANCE) that toPublicLot() deliberately omits, since that
+// field controls whether the lot accepts new bookings (see
+// ticketRepository#createTicket) rather than describing slot availability.
+async function listLotsAdmin() {
+    const docs = await ParkingLotModel.find().sort({ name: 1 });
+    return Promise.all(docs.map(async doc => {
+        const { available, total } = await spotCountsForLot(doc._id);
+        return {
+            id: doc.lot_code,
+            name: doc.name,
+            address: doc.address,
+            pricePerHour: doc.pricePerHour,
+            status: doc.status || 'ACTIVE',
+            totalSlots: total,
+            availableSlots: available
+        };
+    }));
+}
+
+async function updateLotAdmin(lotCode, { status, pricePerHour }) {
+    const update = {};
+    if (status !== undefined) update.status = status;
+    if (pricePerHour !== undefined) update.pricePerHour = pricePerHour;
+
+    const doc = await ParkingLotModel.findOneAndUpdate(
+        { lot_code: lotCode },
+        { $set: update },
+        { returnDocument: 'after' }
+    );
+    if (!doc) {
+        const err = new Error('LOT_NOT_FOUND');
+        err.code = 'LOT_NOT_FOUND';
+        throw err;
+    }
+
+    invalidateLot(lotCode);
+    return doc;
+}
+
 // Moves a single spot (identified by lotCode + spotCode) from one of
 // `fromStatuses` into `toStatus`, adjusting its zone's cached available
 // count to match. Throws { code: 'SPOT_UNAVAILABLE' } if the spot isn't
@@ -140,5 +180,7 @@ module.exports = {
     reserveSpot,
     occupySpot,
     releaseSpot,
-    invalidateLot
+    invalidateLot,
+    listLotsAdmin,
+    updateLotAdmin
 };

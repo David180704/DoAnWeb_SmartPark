@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/auth-header.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="admin-body">
+
+    <div id="deniedPanel" class="admin-denied" style="display:none;">
+        <h2>Không có quyền truy cập</h2>
+        <p>Trang này chỉ dành cho quản trị viên. Đang chuyển về trang chủ...</p>
+    </div>
+
+    <div id="adminShell" class="admin-shell" style="display:none;">
+        <header class="admin-topbar">
+            <div class="admin-topbar-left">
+                <button type="button" id="btnBack" class="admin-back-btn">← Quay lại</button>
+                <span class="admin-logo">SmartPark<span class="admin-logo-badge">Quản Trị</span></span>
+            </div>
+            <div class="admin-topbar-right">
+                <span id="adminName" class="admin-user-name"></span>
+                <button type="button" id="btnLogout" class="admin-logout-btn">Đăng xuất</button>
+            </div>
+        </header>
+
+        <div class="admin-body-layout">
+            <aside class="admin-sidebar">
+                <nav class="admin-nav">
+                    <button type="button" class="admin-nav-item active" data-screen="overview">📊 Tổng quan</button>
+                    <button type="button" class="admin-nav-item" data-screen="lots">🅿️ Bãi đỗ xe</button>
+                    <button type="button" class="admin-nav-item" data-screen="users">👥 Tài khoản người dùng</button>
+                    <button type="button" class="admin-nav-item" data-screen="tickets">🎫 Vé &amp; Giao dịch</button>
+                </nav>
+            </aside>
+
+            <main class="admin-content" id="adminContent"></main>
+        </div>
+
+        <footer class="admin-savebar">
+            <span id="dirtyIndicator" class="admin-dirty-indicator"></span>
+            <button type="button" id="btnSave" class="admin-save-btn" disabled>💾 Lưu thay đổi</button>
+        </footer>
+    </div>
+
+    <script src="/js/auth-header.js"></script>
+    <script>
+        const ADMIN_CACHE_KEY = 'smartpark_admin_cache_v1';
+        const adminUser = SmartParkAuth.getUser();
+
+        if (!SmartParkAuth.getToken() || !adminUser || adminUser.role !== 'ADMIN') {
+            document.getElementById('deniedPanel').style.display = 'block';
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+        } else {
+            document.getElementById('adminShell').style.display = 'flex';
+            document.getElementById('adminName').textContent = '👤 ' + adminUser.fullName;
+            initAdminPanel();
+        }
+
+        function initAdminPanel() {
+            document.getElementById('btnBack').addEventListener('click', () => { window.location.href = '/'; });
+            document.getElementById('btnLogout').addEventListener('click', () => SmartParkAuth.logout());
+
+            // ---- Lightweight client-side cache: screens render instantly from
+            // this on load/switch, then get revalidated over the network in the
+            // background. Save writes the applied values straight back into it,
+            // so "reload the admin UI" after saving never has to refetch. ----
+            function loadCache() {
+                try { return JSON.parse(sessionStorage.getItem(ADMIN_CACHE_KEY) || '{}'); } catch (e) { return {}; }
+            }
+            function persistCache() { sessionStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify(dataCache)); }
+            let dataCache = loadCache();
+
+            // ---- Staged edits, keyed so re-editing the same field before
+            // saving just overwrites the pending value instead of stacking up. ----
+            let pending = {};
+
+            function markDirty(collection, id, field, value, rowEl) {
+                pending[`${collection}:${id}:${field}`] = { collection, id, field, value };
+                rowEl.classList.add('admin-row-dirty');
+                updateSaveBar();
+            }
+
+            function updateSaveBar() {
+                const count = Object.keys(pending).length;
+                const btn = document.getElementById('btnSave');
+                btn.disabled = count === 0;
+                document.getElementById('dirtyIndicator').textContent = count > 0 ? `${count} thay đổi chưa lưu` : '';
+            }
+
+            async function authJson(url, opts) {
+                const res = await SmartParkAuth.authFetch(url, opts);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.message || 'Lỗi hệ thống.');
+                return data;
+            }
+
+            function esc(str) {
+                return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+            function formatMoney(n) { return new Intl.NumberFormat('vi-VN').format(n || 0) + '₫'; }
+            function statusLabel(status) {
+                const map = { PENDING: 'Chờ thanh toán', ACTIVE: 'Đang hiệu lực', COMPLETED: 'Đã hoàn tất', CANCELLED: 'Đã hủy' };
+                return map[status] || status;
+            }
+            function formatAssignment(u) {
+                if (u.role !== 'STAFF') return '—';
+                if (!u.assignment) return 'Chưa phân công';
+                return `${esc(u.assignment.zone)} · ${esc(u.assignment.lotName)}<div class="admin-td-sub">${esc(u.assignment.shiftName)} (${esc(u.assignment.shiftStart)}–${esc(u.assignment.shiftEnd)})</div>`;
+            }
+
+            const content = document.getElementById('adminContent');
+
+            const screens = {
+                overview: { load: () => authJson('/api/admin/overview'), render: renderOverview },
+                lots: { load: () => authJson('/api/admin/lots'), render: renderLots },
+                users: { load: () => authJson('/api/admin/users'), render: renderUsers },
+                tickets: { load: () => authJson('/api/admin/tickets'), render: renderTickets }
+            };
+            let currentScreen = 'overview';
+
+            async function switchScreen(name) {
+                currentScreen = name;
+                document.querySelectorAll('.admin-nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.screen === name));
+
+                if (dataCache[name]) {
+                    screens[name].render(dataCache[name]);
+                } else {
+                    content.innerHTML = '<div class="admin-loading">Đang tải dữ liệu...</div>';
+                }
+
+                try {
+                    const fresh = await screens[name].load();
+                    dataCache[name] = fresh;
+                    persistCache();
+                    if (currentScreen === name) screens[name].render(fresh);
+                } catch (err) {
+                    if (!dataCache[name]) {
+                        content.innerHTML = `<div class="admin-error">Không thể tải dữ liệu: ${esc(err.message)}</div>`;
+                    }
+                }
+            }
+
+            document.querySelectorAll('.admin-nav-item').forEach(btn => {
+                btn.addEventListener('click', () => switchScreen(btn.dataset.screen));
+            });
+
+            // ---- Tổng quan ----
+            function renderOverview(data) {
+                content.innerHTML = `
+                    <h1 class="admin-screen-title">Tổng quan hệ thống</h1>
+                    <p class="admin-screen-desc">Số liệu vận hành theo thời gian thực trên toàn bộ hệ thống.</p>
+                    <div class="admin-stats-grid">
+                        ${statCard('🅿️', 'Bãi đỗ xe', data.lotsCount)}
+                        ${statCard('🔢', 'Tổng chỗ đỗ', data.totalSlots)}
+                        ${statCard('🟢', 'Chỗ trống', data.availableSlots)}
+                        ${statCard('🎫', 'Vé đang hoạt động', data.activeTickets)}
+                        ${statCard('👥', 'Người dùng', data.usersCount)}
+                        ${statCard('💰', 'Doanh thu hôm nay', formatMoney(data.todayRevenue))}
+                        ${statCard('📈', 'Tổng doanh thu', formatMoney(data.totalRevenue))}
+                    </div>
+                `;
+            }
+            function statCard(icon, label, value) {
+                return `<div class="admin-stat-card"><div class="admin-stat-icon">${icon}</div><div class="admin-stat-value">${value}</div><div class="admin-stat-label">${label}</div></div>`;
+            }
+
+            // ---- Bãi đỗ xe ----
+            function renderLots(lots) {
+                content.innerHTML = `
+                    <h1 class="admin-screen-title">Quản lý bãi đỗ xe</h1>
+                    <p class="admin-screen-desc">Điều chỉnh trạng thái hoạt động (đóng để bảo trì) và biểu phí dịch vụ theo giờ cho từng bãi.</p>
+                    <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead><tr><th>Bãi xe</th><th>Địa chỉ</th><th>Chỗ trống</th><th>Giá / giờ (VNĐ)</th><th>Trạng thái</th></tr></thead>
+                        <tbody>
+                        ${lots.map(lot => `
+                            <tr>
+                                <td><strong>${esc(lot.name)}</strong></td>
+                                <td class="admin-td-sub">${esc(lot.address)}</td>
+                                <td>${lot.availableSlots}/${lot.totalSlots}</td>
+                                <td><input type="number" min="0" step="1000" class="admin-input" data-collection="lots" data-id="${esc(lot.id)}" data-field="pricePerHour" value="${lot.pricePerHour}"></td>
+                                <td>
+                                    <select class="admin-select" data-collection="lots" data-id="${esc(lot.id)}" data-field="status">
+                                        <option value="ACTIVE" ${lot.status === 'ACTIVE' ? 'selected' : ''}>Hoạt động</option>
+                                        <option value="MAINTENANCE" ${lot.status === 'MAINTENANCE' ? 'selected' : ''}>Bảo trì (đóng)</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                `;
+                bindEditableInputs();
+            }
+
+            // ---- Tài khoản người dùng ----
+            function renderUsers(users) {
+                content.innerHTML = `
+                    <h1 class="admin-screen-title">Quản trị tài khoản người dùng</h1>
+                    <p class="admin-screen-desc">Khóa tài khoản vi phạm nội quy bãi xe — tài khoản bị khóa sẽ không thể đăng nhập.</p>
+                    <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead><tr><th>Họ tên</th><th>Điện thoại</th><th>Email</th><th>Vai trò</th><th>Khu vực / Ca làm</th><th>Trạng thái</th></tr></thead>
+                        <tbody>
+                        ${users.map(u => `
+                            <tr>
+                                <td><strong>${esc(u.fullName)}</strong></td>
+                                <td>${esc(u.phone)}</td>
+                                <td class="admin-td-sub">${esc(u.email || '—')}</td>
+                                <td><span class="admin-role-badge admin-role-${esc((u.role || '').toLowerCase())}">${esc(u.role)}</span></td>
+                                <td class="admin-td-sub">${formatAssignment(u)}</td>
+                                <td>
+                                    <select class="admin-select" data-collection="users" data-id="${esc(u.id)}" data-field="status" ${u.id === String(adminUser.id) ? 'disabled title="Không thể tự khóa tài khoản của chính mình"' : ''}>
+                                        <option value="ACTIVE" ${u.status === 'ACTIVE' ? 'selected' : ''}>Hoạt động</option>
+                                        <option value="INACTIVE" ${u.status === 'INACTIVE' ? 'selected' : ''}>Đã khóa</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                `;
+                bindEditableInputs();
+            }
+
+            // ---- Vé & Giao dịch (chỉ xem) ----
+            function renderTickets(tickets) {
+                content.innerHTML = `
+                    <h1 class="admin-screen-title">Vé &amp; Giao dịch gần đây</h1>
+                    <p class="admin-screen-desc">${tickets.length} vé gần nhất trong toàn hệ thống.</p>
+                    <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead><tr><th>Mã vé</th><th>Khách hàng</th><th>Bãi xe</th><th>Chỗ</th><th>Trạng thái</th><th>Thanh toán</th><th>Tiền</th></tr></thead>
+                        <tbody>
+                        ${tickets.length ? tickets.map(t => `
+                            <tr>
+                                <td>${esc(t.code)}</td>
+                                <td>${esc(t.customerName)}<div class="admin-td-sub">${esc(t.customerPhone)}</div></td>
+                                <td>${esc(t.lotName)}</td>
+                                <td>${esc(t.spot)}</td>
+                                <td><span class="sp-ticket-badge sp-status-${esc((t.status || '').toLowerCase())}">${esc(statusLabel(t.status))}</span></td>
+                                <td>${t.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : 'Chưa thanh toán'}</td>
+                                <td>${formatMoney(t.totalPrice)}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="7" class="admin-td-sub">Chưa có vé nào.</td></tr>'}
+                        </tbody>
+                    </table>
+                    </div>
+                `;
+            }
+
+            function bindEditableInputs() {
+                content.querySelectorAll('[data-field]').forEach(el => {
+                    el.addEventListener('change', () => {
+                        const { collection, id, field } = el.dataset;
+                        markDirty(collection, id, field, el.value, el.closest('tr'));
+                    });
+                });
+            }
+
+            // ---- Lưu thay đổi ----
+            async function applyChange(group) {
+                if (group.collection === 'lots') {
+                    const body = {};
+                    if ('pricePerHour' in group.fields) body.pricePerHour = Number(group.fields.pricePerHour);
+                    if ('status' in group.fields) body.status = group.fields.status;
+                    const updated = await authJson(`/api/admin/lots/${encodeURIComponent(group.id)}/update`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    patchCacheRow('lots', group.id, updated);
+                } else if (group.collection === 'users') {
+                    const updated = await authJson(`/api/admin/users/${encodeURIComponent(group.id)}/status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: group.fields.status })
+                    });
+                    patchCacheRow('users', group.id, updated);
+                }
+            }
+
+            function patchCacheRow(collection, id, updatedFields) {
+                const list = dataCache[collection];
+                if (!Array.isArray(list)) return;
+                const row = list.find(r => String(r.id) === String(id));
+                if (row) Object.assign(row, updatedFields);
+            }
+
+            document.getElementById('btnSave').addEventListener('click', async () => {
+                const changes = Object.values(pending);
+                if (changes.length === 0) return;
+
+                const grouped = {};
+                changes.forEach(c => {
+                    const key = `${c.collection}:${c.id}`;
+                    grouped[key] = grouped[key] || { collection: c.collection, id: c.id, fields: {} };
+                    grouped[key].fields[c.field] = c.value;
+                });
+
+                const btn = document.getElementById('btnSave');
+                btn.disabled = true;
+                btn.textContent = 'Đang lưu...';
+
+                const results = await Promise.allSettled(Object.values(grouped).map(applyChange));
+                const failed = results.filter(r => r.status === 'rejected');
+
+                pending = {};
+                btn.textContent = '💾 Lưu thay đổi';
+                updateSaveBar();
+                persistCache();
+
+                // "Tải lại" giao diện admin từ cache đã cập nhật thay vì gọi lại
+                // API — giữ thao tác nhẹ và tức thời.
+                if (screens[currentScreen] && dataCache[currentScreen]) {
+                    screens[currentScreen].render(dataCache[currentScreen]);
+                }
+
+                if (failed.length) {
+                    alert('Một số thay đổi không thể lưu:\n' + failed.map(f => '- ' + f.reason.message).join('\n'));
+                }
+            });
+
+            switchScreen('overview');
+        }
+    </script>
+</body>
+</html>

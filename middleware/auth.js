@@ -33,6 +33,15 @@ function requireStaff(req, res, next) {
     });
 }
 
+function requireAdmin(req, res, next) {
+    requireAuth(req, res, () => {
+        if (req.userRole !== 'ADMIN') {
+            return res.status(403).json({ message: 'Chỉ quản trị viên mới có thể thực hiện thao tác này.' });
+        }
+        next();
+    });
+}
+
 function optionalAuth(req, res, next) {
     const token = getTokenFromHeader(req);
     if (token) {
@@ -47,4 +56,4 @@ function optionalAuth(req, res, next) {
     next();
 }
 
-module.exports = { requireAuth, requireStaff, optionalAuth };
+module.exports = { requireAuth, requireStaff, requireAdmin, optionalAuth };

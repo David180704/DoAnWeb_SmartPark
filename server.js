@@ -3,12 +3,13 @@ const path = require('path');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const { requireAuth, requireStaff } = require('./middleware/auth');
+const { requireAuth, requireStaff, requireAdmin } = require('./middleware/auth');
 const { signUserToken } = require('./utils/jwt');
 const { BANK_INFO, buildMemoContent, extractMemoSuffix } = require('./utils/payment');
 const userRepository = require('./repositories/userRepository');
 const parkingRepository = require('./repositories/parkingRepository');
 const ticketRepository = require('./repositories/ticketRepository');
+const staffRepository = require('./repositories/staffRepository');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -91,6 +92,9 @@ app.post('/api/auth/login', async (req, res) => {
         const user = await userRepository.findByPhone(phone);
         if (!user || !userRepository.verifyPassword(password, user.password)) {
             return res.status(400).json({ message: 'Số điện thoại hoặc mật khẩu không chính xác.' });
+        }
+        if (user.status !== 'ACTIVE') {
+            return res.status(403).json({ message: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' });
         }
 
         const vehicle = await userRepository.getDefaultVehicle(String(user._id || user.id));
@@ -175,6 +179,9 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
         }
         if (err.code === 'SPOT_UNAVAILABLE') {
             return res.status(409).json({ message: 'Chỗ này vừa được người khác đặt. Vui lòng chọn chỗ khác.' });
+        }
+        if (err.code === 'LOT_UNAVAILABLE') {
+            return res.status(409).json({ message: 'Bãi xe này đang tạm ngưng hoạt động để bảo trì. Vui lòng chọn bãi khác.' });
         }
         if (err.code === 'LOT_NOT_FOUND') {
             return res.status(404).json({ message: 'Bãi xe không tìm thấy.' });
@@ -333,7 +340,7 @@ app.post('/api/staff/tickets/:code/confirm-payment', requireStaff, async (req, r
 
 app.post('/api/staff/tickets/:code/check-in', requireStaff, async (req, res) => {
     try {
-        const updated = await ticketRepository.checkIn(req.params.code);
+        const updated = await ticketRepository.checkIn(req.params.code, { id: req.userId, role: req.userRole });
         if (!updated) {
             return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
         }
@@ -342,6 +349,15 @@ app.post('/api/staff/tickets/:code/check-in', requireStaff, async (req, res) => 
         if (err.code === 'NOT_PAID') {
             return res.status(400).json({ message: 'Vé chưa thanh toán, cần xác nhận thanh toán trước khi check-in.' });
         }
+        if (err.code === 'NOT_ASSIGNED') {
+            return res.status(403).json({ message: 'Bạn chưa được phân công khu vực/ca làm việc. Vui lòng liên hệ quản trị viên.' });
+        }
+        if (err.code === 'WRONG_ZONE') {
+            return res.status(403).json({ message: `Vé này thuộc khu vực khác. Bạn chỉ được quét vé tại khu vực ${err.assignedZone}.` });
+        }
+        if (err.code === 'OUTSIDE_SHIFT') {
+            return res.status(403).json({ message: `Hiện không trong ca làm việc của bạn (${err.shiftName}). Không thể quét vé.` });
+        }
         console.error('Lỗi khi check-in:', err);
         res.status(500).json({ message: 'Lỗi hệ thống khi check-in.' });
     }
@@ -349,7 +365,7 @@ app.post('/api/staff/tickets/:code/check-in', requireStaff, async (req, res) => 
 
 app.post('/api/staff/tickets/:code/check-out', requireStaff, async (req, res) => {
     try {
-        const updated = await ticketRepository.checkOut(req.params.code);
+        const updated = await ticketRepository.checkOut(req.params.code, { id: req.userId, role: req.userRole });
         if (!updated) {
             return res.status(404).json({ message: 'Không tìm thấy vé đặt chỗ.' });
         }
@@ -358,8 +374,108 @@ app.post('/api/staff/tickets/:code/check-out', requireStaff, async (req, res) =>
         if (err.code === 'NOT_ACTIVE') {
             return res.status(400).json({ message: 'Vé không ở trạng thái có thể check-out.' });
         }
+        if (err.code === 'NOT_ASSIGNED') {
+            return res.status(403).json({ message: 'Bạn chưa được phân công khu vực/ca làm việc. Vui lòng liên hệ quản trị viên.' });
+        }
+        if (err.code === 'WRONG_ZONE') {
+            return res.status(403).json({ message: `Vé này thuộc khu vực khác. Bạn chỉ được quét vé tại khu vực ${err.assignedZone}.` });
+        }
+        if (err.code === 'OUTSIDE_SHIFT') {
+            return res.status(403).json({ message: `Hiện không trong ca làm việc của bạn (${err.shiftName}). Không thể quét vé.` });
+        }
         console.error('Lỗi khi check-out:', err);
         res.status(500).json({ message: 'Lỗi hệ thống khi check-out.' });
+    }
+});
+
+// ===================== ADMIN API (role: ADMIN only) =====================
+
+app.get('/api/admin/overview', requireAdmin, async (req, res) => {
+    try {
+        const [lots, usersCount, stats] = await Promise.all([
+            parkingRepository.listLotsAdmin(),
+            userRepository.countUsers(),
+            ticketRepository.getAdminStats()
+        ]);
+        const totalSlots = lots.reduce((sum, l) => sum + l.totalSlots, 0);
+        const availableSlots = lots.reduce((sum, l) => sum + l.availableSlots, 0);
+        res.json({
+            lotsCount: lots.length,
+            totalSlots,
+            availableSlots,
+            usersCount,
+            ...stats
+        });
+    } catch (err) {
+        console.error('Lỗi khi tải tổng quan quản trị:', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/admin/lots', requireAdmin, async (req, res) => {
+    try {
+        const lots = await parkingRepository.listLotsAdmin();
+        res.json(lots);
+    } catch (err) {
+        console.error('Lỗi khi tải danh sách bãi xe (admin):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.post('/api/admin/lots/:lotId/update', requireAdmin, async (req, res) => {
+    const { status, pricePerHour } = req.body;
+    try {
+        const updated = await parkingRepository.updateLotAdmin(req.params.lotId, { status, pricePerHour });
+        res.json({ id: updated.lot_code, status: updated.status, pricePerHour: updated.pricePerHour });
+    } catch (err) {
+        if (err.code === 'LOT_NOT_FOUND') {
+            return res.status(404).json({ message: 'Bãi xe không tìm thấy.' });
+        }
+        console.error('Lỗi khi cập nhật bãi xe (admin):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+    try {
+        const [users, assignments] = await Promise.all([
+            userRepository.listUsers(),
+            staffRepository.listAssignmentsAdmin()
+        ]);
+        res.json(users.map(u => ({ ...u, assignment: assignments[u.id] || null })));
+    } catch (err) {
+        console.error('Lỗi khi tải danh sách người dùng (admin):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.post('/api/admin/users/:id/status', requireAdmin, async (req, res) => {
+    const { status } = req.body;
+    if (!['ACTIVE', 'INACTIVE'].includes(status)) {
+        return res.status(400).json({ message: 'Trạng thái không hợp lệ.' });
+    }
+    if (req.params.id === req.userId && status === 'INACTIVE') {
+        return res.status(400).json({ message: 'Không thể tự khóa tài khoản của chính mình.' });
+    }
+    try {
+        const updated = await userRepository.updateUserStatus(req.params.id, status);
+        res.json({ id: String(updated._id), status: updated.status });
+    } catch (err) {
+        if (err.code === 'USER_NOT_FOUND') {
+            return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+        }
+        console.error('Lỗi khi cập nhật trạng thái người dùng (admin):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
+    }
+});
+
+app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
+    try {
+        const tickets = await ticketRepository.listRecentForAdmin(50);
+        res.json(tickets);
+    } catch (err) {
+        console.error('Lỗi khi tải danh sách vé (admin):', err);
+        res.status(500).json({ message: 'Lỗi hệ thống.' });
     }
 });
 
@@ -379,6 +495,10 @@ app.get('/login', (req, res) => {
 
 app.get('/staff/scan', (req, res) => {
     res.render('staffScan', { title: 'Quét Vé - SmartPark' });
+});
+
+app.get('/admin', (req, res) => {
+    res.render('admin', { title: 'Quản Trị - SmartPark' });
 });
 
 app.get('/parking/:lotId', async (req, res) => {

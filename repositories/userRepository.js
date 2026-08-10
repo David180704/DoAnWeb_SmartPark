@@ -76,4 +76,41 @@ function verifyPassword(plain, hash) {
     return bcrypt.compareSync(plain, hash);
 }
 
-module.exports = { findByPhone, findById, createUser, verifyPassword, toPublic, getDefaultVehicle };
+async function listUsers() {
+    const users = await User.find().sort({ createdAt: -1 });
+    return users.map(u => ({
+        id: String(u._id),
+        fullName: u.full_name,
+        phone: u.phone,
+        email: u.email,
+        role: u.role,
+        status: u.status,
+        createdAt: u.createdAt
+    }));
+}
+
+async function updateUserStatus(id, status) {
+    const user = await User.findByIdAndUpdate(id, { $set: { status } }, { returnDocument: 'after' });
+    if (!user) {
+        const err = new Error('USER_NOT_FOUND');
+        err.code = 'USER_NOT_FOUND';
+        throw err;
+    }
+    return user;
+}
+
+async function countUsers() {
+    return User.countDocuments();
+}
+
+module.exports = {
+    findByPhone,
+    findById,
+    createUser,
+    verifyPassword,
+    toPublic,
+    getDefaultVehicle,
+    listUsers,
+    updateUserStatus,
+    countUsers
+};
