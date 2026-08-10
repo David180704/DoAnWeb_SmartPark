@@ -40,7 +40,12 @@
   border-bottom: 1px solid #eee;
 }
 
-.sp-tab {
+/* Selectors below are scoped under .sp-user-dropdown so their text color
+   reliably beats the global ".auth-buttons button" rule in style.css
+   (which sets white text for the login/register buttons) — this dropdown
+   lives inside .auth-buttons too, and without this extra specificity its
+   buttons rendered invisible white-on-white. */
+.sp-user-dropdown .sp-tab {
   flex: 1;
   background: none;
   border: none;
@@ -53,7 +58,7 @@
   line-height: 1.3;
 }
 
-.sp-tab.active {
+.sp-user-dropdown .sp-tab.active {
   color: var(--primary-green, #10b981);
   border-bottom-color: var(--primary-green, #10b981);
 }
@@ -111,7 +116,7 @@
 .sp-status-completed { background: #e0e7ff; color: #3730a3; }
 .sp-status-cancelled { background: #fee2e2; color: #991b1b; }
 
-.sp-print-btn {
+.sp-user-dropdown .sp-print-btn {
   margin-top: 6px;
   padding: 5px 12px;
   font-size: 11px;
@@ -123,7 +128,7 @@
   cursor: pointer;
 }
 
-.sp-print-btn:hover {
+.sp-user-dropdown .sp-print-btn:hover {
   background: #f0fdf9;
 }
 
@@ -134,7 +139,7 @@
   padding: 20px 0;
 }
 
-.sp-logout-btn {
+.sp-user-dropdown .sp-logout-btn {
   display: block;
   width: 100%;
   padding: 12px;
@@ -147,6 +152,6 @@
   cursor: pointer;
 }
 
-.sp-logout-btn:hover {
+.sp-user-dropdown .sp-logout-btn:hover {
   background: #ffe4e6;
 }

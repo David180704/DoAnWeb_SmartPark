@@ -8,7 +8,7 @@ const parkingRepository = require('./parkingRepository');
 const userRepository = require('./userRepository');
 const { buildQrUrl } = require('../utils/payment');
 
-const BOOKING_WINDOW_MS = 30 * 60 * 1000; // hold the spot for 30 minutes to check in / pay
+const BOOKING_WINDOW_MS = 5 * 60 * 1000; // hold the spot for 5 minutes to pay before auto-cancelling
 
 function generateTicketCode() {
     return 'TK' + Math.random().toString(36).slice(2, 12).toUpperCase();
@@ -256,4 +256,35 @@ async function checkOut(ticketCode) {
     return { ...found, status: 'COMPLETED', checkOutTime, overtimeMinutes };
 }
 
-module.exports = { createTicket, findByCode, findByUser, confirmPayment, confirmPaymentByMemo, findForStaff, checkIn, checkOut };
+// Auto-cancels any PENDING ticket whose 5-minute payment window has
+// passed: releases its spot back to AVAILABLE, marks the ticket
+// CANCELLED and the transaction FAILED. Run on a timer from server.js.
+async function cancelExpiredTickets() {
+    const expired = await Ticket.find({ status: 'PENDING', booking_expired_at: { $lt: new Date() } });
+
+    for (const ticket of expired) {
+        try {
+            const spot = await ParkingSpot.findById(ticket.spot_id);
+            const lot = await ParkingLotModel.findById(ticket.lot_id);
+            if (spot && lot && spot.status !== 'AVAILABLE') {
+                await parkingRepository.releaseSpot(lot.lot_code, spot.spot_code);
+            }
+
+            ticket.status = 'CANCELLED';
+            await ticket.save();
+
+            await Transaction.updateOne(
+                { ticket_id: ticket._id, payment_status: 'PENDING' },
+                { $set: { payment_status: 'FAILED' } }
+            );
+
+            console.log(`Auto-cancelled expired ticket ${ticket.ticket_code} (unpaid after 5 min).`);
+        } catch (err) {
+            console.error(`Failed to auto-cancel ticket ${ticket.ticket_code}:`, err.message);
+        }
+    }
+
+    return expired.length;
+}
+
+module.exports = { createTicket, findByCode, findByUser, confirmPayment, confirmPaymentByMemo, findForStaff, checkIn, checkOut, cancelExpiredTickets };

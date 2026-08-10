@@ -24,6 +24,15 @@ mongoose.connect(MONGODB_URI)
         process.exit(1);
     });
 
+// Sweep for unpaid tickets past their 5-minute payment window and cancel
+// them (releasing the spot) so it doesn't stay held forever.
+const EXPIRED_TICKET_SWEEP_MS = 30 * 1000;
+setInterval(() => {
+    ticketRepository.cancelExpiredTickets().catch(err => {
+        console.error('Lỗi khi tự động hủy vé quá hạn:', err.message);
+    });
+}, EXPIRED_TICKET_SWEEP_MS);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -62,6 +71,9 @@ app.post('/api/auth/register', async (req, res) => {
     } catch (err) {
         if (err.code === 'PLATE_TAKEN') {
             return res.status(400).json({ message: 'Biển số xe này đã được đăng ký trên hệ thống.' });
+        }
+        if (err.code === 'INVALID_PLATE') {
+            return res.status(400).json({ message: 'Biển số xe không hợp lệ.' });
         }
         console.error('Lỗi khi đăng ký:', err);
         return res.status(500).json({ message: 'Lỗi hệ thống khi đăng ký.' });

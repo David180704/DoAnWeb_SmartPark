@@ -112,6 +112,10 @@
         </div>
       </div>
 
+      <div id="autoRedirectNote" style="background:#ecfdf5; color:#065f46; font-size:13px; font-weight:600; padding:10px 18px; text-align:center;">
+        ✅ Thanh toán thành công! Đang chuyển về trang chủ sau <span id="redirectCountdown">5</span>s...
+      </div>
+
       <div style="padding:18px;">
         <div style="border-bottom:1px solid #f1f5f0; padding-bottom:12px; margin-bottom:12px;">
           <div style="font-size:11px; color:#9ca3a1; text-transform:uppercase; font-weight:700;">Địa điểm</div>
@@ -213,6 +217,19 @@
       document.getElementById('ticketModal').classList.remove('hidden');
       document.getElementById('ticketModal').classList.add('flex');
       clearInterval(pollTimer);
+
+      // Log + auto-redirect to the homepage a few seconds after success
+      console.log('[SmartPark] Thanh toán thành công cho vé', ticketData.code, '- tự động chuyển về trang chủ.');
+      let secondsLeft = 5;
+      const countdownEl = document.getElementById('redirectCountdown');
+      const redirectTimer = setInterval(() => {
+        secondsLeft--;
+        if (countdownEl) countdownEl.textContent = secondsLeft;
+        if (secondsLeft <= 0) {
+          clearInterval(redirectTimer);
+          window.location.href = '/';
+        }
+      }, 1000);
     }
 
     // Confirm payment against the real ticket, then show the e-ticket.

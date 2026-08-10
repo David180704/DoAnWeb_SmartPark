@@ -25,9 +25,23 @@ async function findById(id) {
     return User.findById(id);
 }
 
+// Strips dashes/dots/spaces so "51H-123.45" and "51H 123 45" normalize to
+// the same canonical string as "51H12345" — otherwise the unique index on
+// license_plate could be bypassed by formatting the same physical plate
+// differently.
+function normalizePlate(licensePlate) {
+    const plate = String(licensePlate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!plate) {
+        const err = new Error('INVALID_PLATE');
+        err.code = 'INVALID_PLATE';
+        throw err;
+    }
+    return plate;
+}
+
 async function createUser({ fullName, phone, email, licensePlate, password }) {
     const hashed = bcrypt.hashSync(password, 10);
-    const plate = licensePlate.toUpperCase().trim();
+    const plate = normalizePlate(licensePlate);
 
     const user = await User.create({
         username: phone,
